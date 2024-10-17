@@ -1,6 +1,7 @@
 #include <format>
 #include <set>
 #include <GameObjects.h>
+#include <GameData.h>
 #include <GameMagicEffects.h>
 #include <Script.h>
 #include <GameTasks.h>
@@ -20,6 +21,7 @@ template<class Member> auto LogMember(const std::string& name, Member& member)
 	if (vec.size() == 1) return std::vector{ name + " " + vec[0] };
 	vec = Offset(vec);
 	vec.insert(vec.begin(), name);
+	vec.insert(vec.begin(), "\t \t \t \t \t ");
 	return vec;
 }
 
@@ -37,31 +39,24 @@ inline auto LogClass(TESForm& obj)
 	std::vector<std::string> vec;
 
 	UInt32 refID = obj.refID;
-	UInt32 modIndex = 0;
+	UInt32 modIndex = refID >> 24;
 	std::string modName;
 	std::string refName = obj.GetEditorName();
-	//std::string refName = "";
-	//_MESSAGE("refName: %s", refName.c_str());
-	/*
-	if (obj.ucModIndex == 0xFF)
-	{
+	if (modIndex == 0xFF) {
 		if (refName.empty())
 		{
-			refName = std::format("Temp {}", TESForm::TypeNames[obj.eTypeID]);
+			refName = std::format("Temp {}", TypeNames[obj.typeID]);
 		}
-	} */
-	vec.push_back(std::format("ID: {:08X} ({})", refID, refName));
+		vec.push_back(std::format("ID: {:08X} ({})", refID, refName));
+	}
+	else if (modIndex != 0xFF) {
+		std::string modName = (*g_dataHandler)->GetNthModName(modIndex);
+		
+		vec.push_back(std::format("ID: {:08X} ({}) | (Plugin: \"{}\")", refID, refName, modName));
 
-	/*
-	if (obj.ucModIndex != 0xFF) {
-		TESFile* sourceMod = obj.kMods.m_item;
-		TESFile* lastMod = obj.kMods.TailItem();
-
-		vec.push_back(std::format(R"(Plugin: "{}")", sourceMod->m_Filename));
-
-		if (sourceMod != lastMod)
-			vec.push_back(modName = std::format(R"(Last modified by: "{}")", lastMod->m_Filename));
-	} */
+		//if (sourceMod != lastMod)
+			//vec.push_back(modName = std::format(R"(Last modified by: "{}")", lastMod->m_Filename));
+	}
 	return vec;
 }
 
@@ -69,7 +64,7 @@ inline auto LogClass(TESObjectREFR& obj)
 {
 	auto vec = LogClass(static_cast<TESForm&>(obj));
 	if (const auto baseForm = obj.TryGetREFRParent())
-		vec.append_range(LogMember("BaseForm:", *baseForm));
+		vec.append_range(LogMember("\t \t \t \t \t BaseForm:", *baseForm));
 	return vec;
 }
 
