@@ -1,3 +1,9 @@
+
+inline int ExceptionFilter(unsigned int code)
+{
+	return EXCEPTION_EXECUTE_HANDLER;
+}
+
 inline std::string& SanitizeStringBySize(std::string& str)
 {
 	for (UInt32 i = 0; i < MAX_PATH; i++) if (str[i] == 0)

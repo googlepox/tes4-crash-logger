@@ -3,6 +3,7 @@
 
 #include <Definitions.hpp>
 #include "CrashLogger.hpp"
+#include <Logging.hpp>
 
 IDebugLog    gLog("CrashLogger.log");
 PluginHandle g_pluginHandle = kPluginHandle_Invalid;

@@ -96,54 +96,58 @@ namespace CrashLogger::Calltrace
 	}
 
 	extern void Process(EXCEPTION_POINTERS* info)
+	{
 		try {
-		HANDLE process = GetCurrentProcess();
-		HANDLE thread = GetCurrentThread();
+			HANDLE process = GetCurrentProcess();
+			HANDLE thread = GetCurrentThread();
 
-		DWORD machine = IMAGE_FILE_MACHINE_I386;
-		CONTEXT context = {};
-		memcpy(&context, info->ContextRecord, sizeof(CONTEXT));
+			DWORD machine = IMAGE_FILE_MACHINE_I386;
+			CONTEXT context = {};
+			memcpy(&context, info->ContextRecord, sizeof(CONTEXT));
 
-		Safe_SymSetOptions(SYMOPT_LOAD_LINES | SYMOPT_DEFERRED_LOADS | SYMOPT_UNDNAME | SYMOPT_ALLOW_ABSOLUTE_SYMBOLS);
+			Safe_SymSetOptions(SYMOPT_LOAD_LINES | SYMOPT_DEFERRED_LOADS | SYMOPT_UNDNAME | SYMOPT_ALLOW_ABSOLUTE_SYMBOLS);
 
-		char workingDirectory[MAX_PATH];
-		char symbolPath[MAX_PATH];
-		char altSymbolPath[MAX_PATH];
-		GetCurrentDirectory(MAX_PATH, workingDirectory);
-		GetEnvironmentVariable("_NT_SYMBOL_PATH", symbolPath, MAX_PATH);
-		GetEnvironmentVariable("_NT_ALTERNATE_SYMBOL_PATH ", altSymbolPath, MAX_PATH);
-		std::string lookPath = std::format("{};{}\\Data\\OBSE\\Plugins;{};{}", workingDirectory, workingDirectory, symbolPath, altSymbolPath);
+			char workingDirectory[MAX_PATH];
+			char symbolPath[MAX_PATH];
+			char altSymbolPath[MAX_PATH];
+			GetCurrentDirectory(MAX_PATH, workingDirectory);
+			GetEnvironmentVariable("_NT_SYMBOL_PATH", symbolPath, MAX_PATH);
+			GetEnvironmentVariable("_NT_ALTERNATE_SYMBOL_PATH ", altSymbolPath, MAX_PATH);
+			std::string lookPath = std::format("{};{}\\Data\\OBSE\\plugins;{};{}", workingDirectory, workingDirectory, symbolPath, altSymbolPath);
 
-		//	SymSetExtendedOption((IMAGEHLP_EXTENDED_OPTIONS)SYMOPT_EX_WINE_NATIVE_MODULES, TRUE);
-		if (!Safe_SymInitialize(process, lookPath.c_str(), true))
-			output << "Error initializing symbol store" << '\n';
+			//	SymSetExtendedOption((IMAGEHLP_EXTENDED_OPTIONS)SYMOPT_EX_WINE_NATIVE_MODULES, TRUE);
+			if (!Safe_SymInitialize(process, lookPath.c_str(), true)) {
+				output << "Error initializing symbol store" << '\n';
+			}
+				
 
-		//	SymSetExtendedOption((IMAGEHLP_EXTENDED_OPTIONS)SYMOPT_EX_WINE_NATIVE_MODULES, TRUE);
+			//	SymSetExtendedOption((IMAGEHLP_EXTENDED_OPTIONS)SYMOPT_EX_WINE_NATIVE_MODULES, TRUE);
 
-		STACKFRAME frame = {};
-		frame.AddrPC.Offset = info->ContextRecord->Eip;
-		frame.AddrPC.Mode = AddrModeFlat;
-		frame.AddrFrame.Offset = info->ContextRecord->Ebp;
-		frame.AddrFrame.Mode = AddrModeFlat;
-		frame.AddrStack.Offset = info->ContextRecord->Esp;
-		frame.AddrStack.Mode = AddrModeFlat;
-		DWORD eip = 0;
+			STACKFRAME frame = {};
+			frame.AddrPC.Offset = info->ContextRecord->Eip;
+			frame.AddrPC.Mode = AddrModeFlat;
+			frame.AddrFrame.Offset = info->ContextRecord->Ebp;
+			frame.AddrFrame.Mode = AddrModeFlat;
+			frame.AddrStack.Offset = info->ContextRecord->Esp;
+			frame.AddrStack.Mode = AddrModeFlat;
+			DWORD eip = 0;
+			
+			// crutch to try to copy dbghelp before.
+			output << "Calltrace:" << '\n' << std::format("{:^10} |  {:^40} | {:^40} | Source", "ebp", "Function Address", "Function Name") <<
+				'\n';
 
-		// retarded crutch to try to copy dbghelp before.
-		output << "Calltrace:" << '\n' << std::format("{:^10} |  {:^40} | {:^40} | Source", "ebp", "Function Address", "Function Name") <<
-			'\n';
-
-		while (Safe_StackWalk(machine, process, thread, &frame, &context, NULL, Safe_SymFunctionTableAccess, Safe_SymGetModuleBase, NULL)) {
-			/*
-			Using  a PDB for OBSE from VS2019 is causing the frame to repeat, but apparently only if WINEDEBUG=+dbghelp isn't setted. Is this a wine issue?
-			When this happen winedbg show only the first line (this happens with the first frame only probably, even if there are more frames shown when using WINEDEBUG=+dbghelp )
-			*/
-			if (frame.AddrPC.Offset == eip) break;
-			eip = frame.AddrPC.Offset;
-			output << GetCalltraceFunction(frame.AddrPC.Offset, frame.AddrFrame.Offset, process) << '\n';
+			while (Safe_StackWalk(machine, process, thread, &frame, &context, NULL, Safe_SymFunctionTableAccess, Safe_SymGetModuleBase, NULL)) {
+				/*
+				Using  a PDB for OBSE from VS2019 is causing the frame to repeat, but apparently only if WINEDEBUG=+dbghelp isn't setted. Is this a wine issue?
+				When this happen winedbg show only the first line (this happens with the first frame only probably, even if there are more frames shown when using WINEDEBUG=+dbghelp )
+				*/
+				if (frame.AddrPC.Offset == eip) break;
+				eip = frame.AddrPC.Offset;
+				output << GetCalltraceFunction(frame.AddrPC.Offset, frame.AddrFrame.Offset, process) << '\n';
+			}
 		}
+		catch (...) { output << "Failed to log callstack." << '\n'; }
 	}
-	catch (...) { output << "Failed to log callstack." << '\n'; }
 
 	extern std::stringstream& Get() { output.flush(); return output; }
 }

@@ -15,6 +15,7 @@
     <ClCompile Include="Modules.cpp" />
     <ClCompile Include="Device.cpp" />
     <ClCompile Include="LabelsOBSE.cpp" />
+    <ClCompile Include="Logging.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="CrashLogger.hpp" />
@@ -24,6 +25,7 @@
     <ClInclude Include="Utilities.hpp" />
     <ClInclude Include="RTTI.hpp" />
     <ClInclude Include="Formatter.hpp" />
+    <ClInclude Include="Logging.hpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="exports.def" />

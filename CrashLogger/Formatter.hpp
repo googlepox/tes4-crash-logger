@@ -37,6 +37,7 @@ inline auto LogClass(TESForm& obj)
 	std::vector<std::string> vec;
 
 	UInt32 refID = obj.refID;
+	UInt32 modIndex = 0;
 	std::string modName;
 	std::string refName = obj.GetEditorName();
 	//std::string refName = "";
@@ -148,8 +149,8 @@ inline std::vector<std::string> LogClass(const NiExtraData& obj)
 	return {};
 } */
 
-//inline std::vector<std::string> LogClass(const BSFile& obj) { return std::vector{ '"' + SanitizeString(obj.m_path) + '"' }; }
-//inline std::vector<std::string> LogClass(const TESModel& obj) { return std::vector{ '"' + SanitizeString(obj.nifPath.m_data) + '"' }; }
+inline std::vector<std::string> LogClass(const BSFile& obj) { return std::vector{ '"' + SanitizeString(obj.m_path) + '"' }; }
+inline std::vector<std::string> LogClass(const TESModel& obj) { return std::vector{ '"' + SanitizeString(obj.nifPath.m_data) + '"' }; }
 
 /*
 inline std::vector<std::string> LogClass(const QueuedModel& obj)

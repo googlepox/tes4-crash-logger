@@ -106,14 +106,15 @@ namespace CrashLogger::Modules
 
 		const UInt32 eip = info->ContextRecord->Eip;
 
-		UserContext infoUser = { eip,  0, (char*)calloc(sizeof(char), 100) };
+		UserContext infoUser = { eip,  0, (char*)calloc(sizeof(char), 200) };
 
 		Safe_EnumerateLoadedModules(process, EumerateModulesCallback, &infoUser);
 
 		size_t memoryAllocated = 0;
 
-		output << "Module bases:" << '\n' << std::format(" {:^23} | {:>40} ", "Address", "Module") <<
-			'\n';;
+		//output << "Module bases:" << '\n' << std::format(" {:^23} | {:>40} ", "Address", "Module") <<
+		//	'\n';;
+		_MESSAGE("Module bases: \n %s \n", std::format(" {:^23} | {:>40} | {:>20} | Filepath", "Address", "Module", "Version").c_str());
 		for (const auto& [moduleBase, moduleEnd, path] : enumeratedModules)
 		{
 			std::string version;
@@ -133,26 +134,40 @@ namespace CrashLogger::Modules
 
 			memoryAllocated += moduleEnd - moduleBase;
 
-			output << std::format(" 0x{:08X} - 0x{:08X} | {:>40} ", moduleBase, moduleEnd, path.stem().generic_string()) <<
-				'\n';
+			//output << std::format(" 0x{:08X} - 0x{:08X} | {:>40} ", moduleBase, moduleEnd, path.stem().generic_string()) <<
+			//	'\n';
+			_MESSAGE("%s \n", std::format(" 0x{:08X} - 0x{:08X} | {:>40} | {:>20} | {}", moduleBase, moduleEnd, path.stem().generic_string(), version, SanitizeString(path.generic_string())).c_str());
 		}
 
-		output << "\nTotal memory allocated to modules: " << FormatSize(memoryAllocated) << '\n';
-
+		//output << "\nTotal memory allocated to modules: " << FormatSize(memoryAllocated) << '\n';
+		_MESSAGE("\nTotal memory allocated to modules: %s \n", FormatSize(memoryAllocated).c_str());
 		output << '\n';
 
-		if (infoUser.moduleBase)
+		if (infoUser.moduleBase) {
+			/*
 			output << std::format("GAME CRASHED AT INSTRUCTION Base+0x{:08X} IN MODULE: {}", (infoUser.eip - infoUser.moduleBase), infoUser.name) <<
 			'\n'
 			<< "Please note that this does not automatically mean that that module is responsible. It may have been supplied bad data or" <<
 			'\n'
-			<< "program state as the result of an issue in the base game or a different DLL." << '\n';
-		else
+			<< "program state as the result of an issue in the base game or a different DLL." << '\n'; */
+			_MESSAGE("%s \n", std::format("GAME CRASHED AT INSTRUCTION Base+0x{:08X} IN MODULE: {}", (infoUser.eip - infoUser.moduleBase), infoUser.name).c_str());
+			_MESSAGE("Please note that this does not automatically mean that that module is responsible. It may have been supplied bad data or \n");
+			_MESSAGE("program state as the result of an issue in the base game or a different DLL.\n");
+		}
+		else {
+			/*
 			output << "UNABLE TO IDENTIFY MODULE CONTAINING THE CRASH ADDRESS." << '\n'
 			<< "This can occur if the crashing instruction is located in the vanilla address space, but it can also occur if there are too many" << '\n'
 			<< "DLLs for us to list, and if the crash occurred in one of their address spaces. Please note that even if the crash occurred" << '\n'
 			<< "in vanilla code, that does not necessarily mean that it is a vanilla problem. The vanilla code may have been supplied bad data" << '\n'
-			<< "or program state as the result of an issue in a loaded DLL." << '\n';
+			<< "or program state as the result of an issue in a loaded DLL." << '\n'; */
+
+			_MESSAGE("UNABLE TO IDENTIFY MODULE CONTAINING THE CRASH ADDRESS.");
+			_MESSAGE("This can occur if the crashing instruction is located in the vanilla address space, but it can also occur if there are too many");
+			_MESSAGE("DLLs for us to list, and if the crash occurred in one of their address spaces. Please note that even if the crash occurred");
+			_MESSAGE("in vanilla code, that does not necessarily mean that it is a vanilla problem. The vanilla code may have been supplied bad data");
+			_MESSAGE("or program state as the result of an issue in a loaded DLL. \n");
+		}
 	}
 	catch (...) { output << "Failed to print out modules." << '\n'; }
 

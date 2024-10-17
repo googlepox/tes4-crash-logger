@@ -186,7 +186,7 @@ namespace CrashLogger::Labels
 			__try {
 				return *static_cast<UInt32*>(ptr) >= address && *static_cast<UInt32*>(ptr) <= address + size;
 			}
-			__except (EXCEPTION_EXECUTE_HANDLER)
+			__except (ExceptionFilter(GetExceptionCode()))
 			{
 				return false;
 			}

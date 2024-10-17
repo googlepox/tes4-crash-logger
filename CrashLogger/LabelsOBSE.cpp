@@ -313,12 +313,12 @@ namespace CrashLogger::Labels
 		Push(kVtbl_QueuedKF);
 		Push(kVtbl_QueuedAnimIdle);
 
-		Push(kVtbl_BSFile);
+		Push(kVtbl_BSFile), As<BSFile>;
 		Push(kVtbl_ArchiveFile);
 		Push(kVtbl_CompressedArchiveFile);
 
 		// model
-		Push(kVtbl_TESModel);
+		Push(kVtbl_TESModel), As<TESModel>;
 		Push(kVtbl_QueuedModel);
 
 		// effects

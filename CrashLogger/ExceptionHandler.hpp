@@ -1,5 +1,6 @@
 #include <CrashLogger.hpp>
 #include <obse_common/SafeWrite.h>
+#include <Logging.hpp>
 
 #define SYMOPT_EX_WINE_NATIVE_MODULES 1000
 
@@ -107,7 +108,7 @@ namespace CrashLogger::PDB
 			}
 			return result;
 		}
-		__except (EXCEPTION_EXECUTE_HANDLER)
+		__except (ExceptionFilter(GetExceptionCode()))
 		{
 			return "";
 		}
@@ -147,13 +148,16 @@ namespace CrashLogger
 		//Memory::Process(info);
 		//_MESSAGE("processing device");
 		//Device::Process(info);
+		//_MESSAGE("processing calltrace");
 		Calltrace::Process(info);
 		//_MESSAGE("processing registry");
 		Registry::Process(info);
+		//_MESSAGE("processing stack");
 		Stack::Process(info);
 		//Mods::Process(info)
 		Install::Process(info);
-		Modules::Process(info);
+		//_MESSAGE("processing modules");
+		//Modules::Process(info);
 		//AssetTracker::Process(info);
 
 		const auto processing = std::chrono::system_clock::now();
@@ -161,6 +165,7 @@ namespace CrashLogger
 		_MESSAGE("%s", Playtime::Get().str().c_str());
 		_MESSAGE("%s", Exception::Get().str().c_str());
 		//_MESSAGE("%s", Thread::Get().str().c_str());
+		//_MESSAGE("================================");
 		_MESSAGE("%s", Calltrace::Get().str().c_str());
 		_MESSAGE("================================");
 		_MESSAGE("%s", Registry::Get().str().c_str());
@@ -175,7 +180,8 @@ namespace CrashLogger
 		//_MESSAGE("================================");
 		//_MESSAGE("%s", AssetTracker::Get().str());
 		//_MESSAGE("================================");
-		_MESSAGE("%s", Modules::Get().str().c_str());
+		Modules::Process(info);
+		//_MESSAGE("%s", Modules::Get().str().c_str());
 		_MESSAGE("================================");
 		_MESSAGE("%s", Install::Get().str().c_str());
 

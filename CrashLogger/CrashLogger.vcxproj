@@ -139,6 +139,7 @@
       </ForcedIncludeFiles>
     </ClCompile>
     <ClCompile Include="LabelsOBSE.cpp" />
+    <ClCompile Include="Logging.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Modules.cpp" />
     <ClCompile Include="RegistryStack.cpp" />
@@ -149,6 +150,7 @@
     <ClInclude Include="Definitions.hpp" />
     <ClInclude Include="ExceptionHandler.hpp" />
     <ClInclude Include="Formatter.hpp" />
+    <ClInclude Include="Logging.hpp" />
     <ClInclude Include="RTTI.hpp" />
     <ClInclude Include="Utilities.hpp" />
   </ItemGroup>
