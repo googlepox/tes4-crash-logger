@@ -1,0 +1,31 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="OBSE">
+      <UniqueIdentifier>{94aa795e-944e-41af-a0d6-aa5deea207d6}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="dllmain.c" />
+    <ClCompile Include="main.cpp" />
+    <ClCompile Include="Definitions.cpp" />
+    <ClCompile Include="DbgHelpWrapper.cpp" />
+    <ClCompile Include="CallTrace.cpp" />
+    <ClCompile Include="RegistryStack.cpp" />
+    <ClCompile Include="Modules.cpp" />
+    <ClCompile Include="Device.cpp" />
+    <ClCompile Include="LabelsOBSE.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="CrashLogger.hpp" />
+    <ClInclude Include="DbgHelpWrapper.hpp" />
+    <ClInclude Include="ExceptionHandler.hpp" />
+    <ClInclude Include="Definitions.hpp" />
+    <ClInclude Include="Utilities.hpp" />
+    <ClInclude Include="RTTI.hpp" />
+    <ClInclude Include="Formatter.hpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="exports.def" />
+  </ItemGroup>
+</Project>
