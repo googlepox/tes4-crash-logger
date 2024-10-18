@@ -11,7 +11,7 @@ namespace CrashLogger::Playtime
 	extern void Init() { gameStart = std::chrono::system_clock::now(); }
 
 	extern void Process(EXCEPTION_POINTERS* info)
-		try
+	try
 	{
 		gameEnd = std::chrono::system_clock::now();
 		output << std::format("Playtime: {:%T}\n", gameEnd - gameStart);
@@ -28,12 +28,14 @@ namespace CrashLogger::Exception
 	std::stringstream output;
 
 	extern void Process(EXCEPTION_POINTERS* info)
-		try
 	{
-		output << std::format("Exception: {} ({:08X})\n", GetExceptionAsString(info->ExceptionRecord->ExceptionCode), info->ExceptionRecord->ExceptionCode);
-		if (GetLastError()) output << std::format("Last Error: {} ({:08X})\n", SanitizeString(GetErrorAsString(GetLastError())), GetLastError());
+		try
+		{
+			output << std::format("Exception: {} ({:08X})\n", GetExceptionAsString(info->ExceptionRecord->ExceptionCode), info->ExceptionRecord->ExceptionCode);
+			if (GetLastError()) output << std::format("Last Error: {} ({:08X})\n", SanitizeString(GetErrorAsString(GetLastError())), GetLastError());
+		}
+		catch (...) { output << "Failed to log exception." << '\n'; }
 	}
-	catch (...) { output << "Failed to log exception." << '\n'; }
 
 	extern std::stringstream& Get() { output.flush(); return output; }
 }

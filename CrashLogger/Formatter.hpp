@@ -37,7 +37,6 @@ template<class Member> std::string LogClassLineByLine(Member& member)
 inline auto LogClass(TESForm& obj)
 {
 	std::vector<std::string> vec;
-
 	UInt32 refID = obj.refID;
 	UInt32 modIndex = refID >> 24;
 	std::string modName;
@@ -45,14 +44,19 @@ inline auto LogClass(TESForm& obj)
 	if (modIndex == 0xFF) {
 		if (refName.empty())
 		{
-			refName = std::format("Temp {}", TypeNames[obj.typeID]);
+			if (!&obj) {
+				refName = std::format("Temp {} ({})", TypeNames[obj.typeID], "NULL");
+			}
+			else {
+				refName = std::format("Temp {}", TypeNames[obj.typeID]);
+			}
 		}
 		vec.push_back(std::format("ID: {:08X} ({})", refID, refName));
 	}
 	else if (modIndex != 0xFF) {
 		std::string modName = (*g_dataHandler)->GetNthModName(modIndex);
 		
-		vec.push_back(std::format("ID: {:08X} ({}) | (Plugin: \"{}\")", refID, refName, modName));
+		vec.push_back(std::format("ID: {:08X} ({}) : (Plugin: \"{}\")", refID, refName, modName));
 
 		//if (sourceMod != lastMod)
 			//vec.push_back(modName = std::format(R"(Last modified by: "{}")", lastMod->m_Filename));

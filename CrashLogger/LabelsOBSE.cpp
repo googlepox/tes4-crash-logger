@@ -57,7 +57,7 @@ namespace CrashLogger::Labels
 		Push(kVtbl_MagicItemObject);
 		Push(kVtbl_Script, As<TESForm>);
 		Push(kVtbl_SpellItem, As<TESForm>);
-		Push(kVtbl_TESActorBase);
+		Push(kVtbl_TESActorBase, As<TESForm>);
 		Push(kVtbl_TESAmmo);
 		Push(kVtbl_TESBoundAnimObject);
 		Push(kVtbl_TESBoundObject);
@@ -116,15 +116,15 @@ namespace CrashLogger::Labels
 
 		Push(kVtbl_TESObjectREFR, As<TESObjectREFR>);
 		Push(kVtbl_MobileObject);
-		Push(kVtbl_Actor);
-		Push(kVtbl_Creature);
-		Push(kVtbl_Character);
+		Push(kVtbl_Actor, As<TESForm>);
+		Push(kVtbl_Creature, As<TESObjectREFR>);
+		Push(kVtbl_Character, As<TESObjectREFR>);
 		Push(kVtbl_PlayerCharacter);
 		Push(kVtbl_ArrowProjectile);
 
 		Push(kVtbl_QueuedReference, As<QueuedReference>);
-		Push(kVtbl_QueuedCharacter);
-		Push(kVtbl_QueuedCreature);
+		Push(kVtbl_QueuedCharacter, As<QueuedReference>);
+		Push(kVtbl_QueuedCreature, As<QueuedReference>);
 		Push(kVtbl_QueuedPlayer);
 
 		Push(kVtbl_BaseProcess);

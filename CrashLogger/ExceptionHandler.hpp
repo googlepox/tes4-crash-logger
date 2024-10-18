@@ -1,6 +1,7 @@
 #include <CrashLogger.hpp>
 #include <obse_common/SafeWrite.h>
 #include <Logging.hpp>
+#include <signal.h>
 
 #define SYMOPT_EX_WINE_NATIVE_MODULES 1000
 
@@ -137,22 +138,32 @@ namespace CrashLogger::PDB
 
 namespace CrashLogger
 {
+	void SignalHandler(int signal)
+	{
+		printf("Signal %d", signal);
+		throw "!Access Violation!";
+	}
 
 	void Log(EXCEPTION_POINTERS* info)
 	{
+		
 		const auto begin = std::chrono::system_clock::now();
 
 		Playtime::Process(info);
+		_MESSAGE("processing exception");
 		Exception::Process(info);
 		//Thread::Process(info);
 		//Memory::Process(info);
 		//_MESSAGE("processing device");
 		//Device::Process(info);
 		//_MESSAGE("processing calltrace");
+		_MESSAGE("processing calltrace");
 		Calltrace::Process(info);
 		//_MESSAGE("processing registry");
+		_MESSAGE("processing registry");
 		Registry::Process(info);
 		//_MESSAGE("processing stack");
+		_MESSAGE("processing stack");
 		Stack::Process(info);
 		//Mods::Process(info)
 		Install::Process(info);
@@ -201,6 +212,12 @@ namespace CrashLogger
 	static LPTOP_LEVEL_EXCEPTION_FILTER s_originalFilter = nullptr;
 
 	LONG WINAPI Filter(EXCEPTION_POINTERS* info) {
+
+		typedef void (*SignalHandlerPointer)(int);
+
+		SignalHandlerPointer previousHandler;
+		previousHandler = signal(SIGSEGV, SignalHandler);
+
 		static bool caught = false;
 		bool ignored = false;
 		if (caught) ignored = true;
