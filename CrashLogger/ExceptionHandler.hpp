@@ -138,11 +138,6 @@ namespace CrashLogger::PDB
 
 namespace CrashLogger
 {
-	void SignalHandler(int signal)
-	{
-		printf("Signal %d", signal);
-		throw "!Access Violation!";
-	}
 
 	void Log(EXCEPTION_POINTERS* info)
 	{
@@ -213,10 +208,10 @@ namespace CrashLogger
 
 	LONG WINAPI Filter(EXCEPTION_POINTERS* info) {
 
-		typedef void (*SignalHandlerPointer)(int);
+		//typedef void (*SignalHandlerPointer)(int);
 
-		SignalHandlerPointer previousHandler;
-		previousHandler = signal(SIGSEGV, SignalHandler);
+		//SignalHandlerPointer previousHandler;
+		//previousHandler = signal(SIGSEGV, SignalHandler);
 
 		static bool caught = false;
 		bool ignored = false;

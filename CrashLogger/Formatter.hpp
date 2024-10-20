@@ -5,6 +5,7 @@
 #include <GameMagicEffects.h>
 #include <Script.h>
 #include <GameTasks.h>
+#include <NiExtraData.h>
 
 // If class is described by a single line, no need to name the variable
 // If there is a member class, if it's one-line, leave it as one-line, if there are several, prepend the name and add offset
@@ -72,17 +73,18 @@ inline auto LogClass(TESObjectREFR& obj)
 	return vec;
 }
 
+inline auto LogClass(TESPathGrid& obj)
+{
+	auto vec = LogClass(static_cast<TESForm&>(obj));
+	if (obj.theChildCell)
+		vec.append_range(LogMember("Cell:", static_cast<TESForm&>(*obj.theChildCell)));
+	return vec;
+}
+
 //inline std::vector<std::string> LogClass(const ActorMover& obj) { if (obj.pkActor) return LogClass(*obj.pkActor); return {}; }
 inline std::vector<std::string> LogClass(const QueuedReference& obj) { if (obj.refr) return LogClass(*obj.refr); return {}; }
 
 /*
-inline auto LogClass(const NavMesh& obj)
-{
-	auto vec = LogClass(static_cast<const TESForm&>(obj));
-	if (obj.pParentCell)
-		vec.append_range(LogMember("Cell:", static_cast<const TESForm&>(*obj.pParentCell)));
-	return vec;
-}
 
 inline std::vector<std::string>  LogClass(const BaseProcess& obj)
 {
@@ -123,24 +125,6 @@ inline std::vector<std::string> LogClass(const AnimSequenceMultiple& obj)
 	return vec;
 } 
 
-inline std::vector<std::string> LogClass(const NiObjectNET& obj)
-{
-	const auto name = obj.m_kName.GetStd();
-	if (!name.empty())
-		return std::vector{ '"' + SanitizeString(name.c_str()) + '"' };
-	return {};
-}
-
-inline std::vector<std::string> LogClass(const NiNode& obj)
-{
-	std::vector<std::string> vec;
-	if (const auto name = obj.m_kName.GetStd(); !name.empty())
-		vec = LogMember("Name:", static_cast<const NiObjectNET&>(obj));
-	if (const auto ref = TESObjectREFR::FindReferenceFor3D(&obj))
-		vec.append_range(LogMember("Reference:", *ref));
-	return vec;
-}
-
 inline std::vector<std::string> LogClass(const NiExtraData& obj)
 {
 	if (const auto name = obj.m_kName.GetStd(); !name.empty())
@@ -148,10 +132,35 @@ inline std::vector<std::string> LogClass(const NiExtraData& obj)
 	return {};
 } */
 
+inline std::vector<std::string> LogClass(NiExtraData & obj)
+{
+	if (const auto name = obj.m_pcName; name)
+		return std::vector{ '"' + SanitizeString(name) + '"' };
+	return {};
+}
+
+inline std::vector<std::string> LogClass(NiObjectNET& obj)
+{
+	const auto name = obj.m_pcName;
+	if (name)
+		return std::vector{ '"' + SanitizeString(name) + '"' };
+	return {};
+}
+
+inline std::vector<std::string> LogClass(NiNode& obj)
+{
+	std::vector<std::string> vec;
+	if (const auto name = obj.m_pcName)
+		vec = LogMember("Name: ", static_cast<NiObjectNET&>(obj));
+	//if (const auto ref = TESObjectREFR::FindReferenceFor3D(&obj))
+		//vec.append_range(LogMember("Reference:", *ref));
+	return vec;
+}
+
 inline std::vector<std::string> LogClass(const BSFile& obj) { return std::vector{ '"' + SanitizeString(obj.m_path) + '"' }; }
 inline std::vector<std::string> LogClass(const TESModel& obj) { return std::vector{ '"' + SanitizeString(obj.nifPath.m_data) + '"' }; }
 
-/*
+
 inline std::vector<std::string> LogClass(const QueuedModel& obj)
 {
 	std::vector<std::string> vec;
@@ -160,9 +169,9 @@ inline std::vector<std::string> LogClass(const QueuedModel& obj)
 	if (obj.model)
 		vec.append_range(LogMember("Model:", *obj.model));
 	return vec;
-} */
+}
 
-//inline std::vector<std::string> LogClass(const TESTexture& obj) { return std::vector{ '"' + SanitizeString(obj.ddsPath.m_data) + '"' }; }
+inline std::vector<std::string> LogClass(const TESTexture& obj) { return std::vector{ '"' + SanitizeString(obj.ddsPath.m_data) + '"' }; }
 //inline std::vector<std::string> LogClass(const QueuedTexture& obj) { return std::vector{ '"' + SanitizeString(obj.pFileName) + '"' }; }
 //inline std::vector<std::string> LogClass(const NiStream& obj) { return std::vector{ '"' + SanitizeString(obj.m_acFileName) + '"' }; }
 inline std::vector<std::string> LogClass(const ActiveEffect& obj) { if (obj.enchantObject) return LogClass(*obj.enchantObject); return {}; }
@@ -188,7 +197,7 @@ inline std::vector<std::string> LogClass(const ScriptEffect& obj)
 	return vec;
 }
 
-//inline std::vector<std::string> LogClass(const QueuedKF& obj) { if (obj.kf) return std::vector{ '"' + SanitizeString(obj.kf->path) + '"' }; return {}; }
+inline std::vector<std::string> LogClass(const QueuedKF& obj) { if (obj.kf) return std::vector{ '"' + SanitizeString(obj.kf->path) + '"' }; return {}; }
 //inline std::vector<std::string> LogClass(const bhkRefObject& obj) { if (const auto object = obj.hkObj) return LogClass(*object); return {}; }
 
 /*

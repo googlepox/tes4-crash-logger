@@ -96,6 +96,7 @@ namespace CrashLogger::Labels
 		Push(kVtbl_TESObjectSTAT);
 		Push(kVtbl_TESObjectTREE);
 		Push(kVtbl_TESObjectWEAP);
+		Push(kVtbl_TESPathgrid, As<TESPathGrid>);
 		Push(kVtbl_TESQuest);
 		Push(kVtbl_TESRace);
 		Push(kVtbl_TESRegion);
@@ -135,13 +136,15 @@ namespace CrashLogger::Labels
 
 
 
-		Push(kVtbl_TESTexture);
+		Push(kVtbl_TESTexture, As<TESTexture>);
 		Push(kVtbl_TESIcon);
 		Push(kVtbl_QueuedTexture);
 
 
 		// Ni
-
+		Push(kVtbl_NiNode, As<NiNode>);
+		Push(kVtbl_NiObjectNET, As<NiObjectNET>);
+		Push(kVtbl_NiExtraData, As<NiExtraData>);
 		// NiProperty
 		Push(kVtbl_NiVertexColorProperty);
 		//		Push(kVtbl_NiWireframeProperty);
@@ -310,7 +313,7 @@ namespace CrashLogger::Labels
 		Push(kVtbl_AnimSequenceSingle);
 		Push(kVtbl_AnimSequenceMultiple);
 
-		Push(kVtbl_QueuedKF);
+		Push(kVtbl_QueuedKF, As<QueuedKF>);
 		Push(kVtbl_QueuedAnimIdle);
 
 		Push(kVtbl_BSFile), As<BSFile>;
@@ -319,7 +322,7 @@ namespace CrashLogger::Labels
 
 		// model
 		Push(kVtbl_TESModel), As<TESModel>;
-		Push(kVtbl_QueuedModel);
+		Push(kVtbl_QueuedModel, As<QueuedModel>);
 
 		// effects
 		Push(kVtbl_ScriptEffect, As<ScriptEffect>);
