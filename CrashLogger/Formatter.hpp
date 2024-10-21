@@ -157,6 +157,16 @@ inline std::vector<std::string> LogClass(NiNode& obj)
 	return vec;
 }
 
+inline std::vector<std::string> LogClass(NiTriStrips& obj)
+{
+	std::vector<std::string> vec;
+	if (const auto name = obj.m_pcName)
+		vec = LogMember("Name: ", static_cast<NiObjectNET&>(obj));
+	//if (const auto ref = TESObjectREFR::FindReferenceFor3D(&obj))
+		//vec.append_range(LogMember("Reference:", *ref));
+	return vec;
+}
+
 inline std::vector<std::string> LogClass(const BSFile& obj) { return std::vector{ '"' + SanitizeString(obj.m_path) + '"' }; }
 inline std::vector<std::string> LogClass(const TESModel& obj) { return std::vector{ '"' + SanitizeString(obj.nifPath.m_data) + '"' }; }
 
@@ -244,7 +254,7 @@ inline std::vector<std::string> LogClass(const hkpWorldObject& obj)
 		vec.append_range(LogMember("Collision Object:", reinterpret_cast<const NiCollisionObject&>(*object)));
 
 	return vec;
-}
+} 
 
 inline std::vector<std::string> LogClass(const IMemoryHeap& obj)
 {

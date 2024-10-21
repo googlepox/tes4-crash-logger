@@ -142,6 +142,7 @@
     <ClCompile Include="LabelsOBSE.cpp" />
     <ClCompile Include="Logging.cpp" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="Memory.cpp" />
     <ClCompile Include="Modules.cpp" />
     <ClCompile Include="RegistryStack.cpp" />
   </ItemGroup>

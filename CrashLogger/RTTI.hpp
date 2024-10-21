@@ -292,6 +292,8 @@ enum ObjectVtblOBSE
 	kVtbl_Stars = 0xA57144,
 	kVtbl_Sun = 0xA571DC,
 	kVtbl_NiNode = 0xA7E38C,
+	kVtbl_NiTriStrips = 0xA7F27C,
+	kVtbl_NiStream = 0xA7EA1C,
 	kVtbl_NiObjectNET = 0xA7D5BC,
 	kVtbl_NiExtraData = 0xA7F6DC,
 	kVtbl_BSFaceGenAnimationData = 0xA6424C,

@@ -139,29 +139,93 @@ namespace CrashLogger::PDB
 namespace CrashLogger
 {
 
+	void LogPlaytime(EXCEPTION_POINTERS* info) {
+		__try {
+			Playtime::Process(info);
+		}
+		__except (EXCEPTION_EXECUTE_HANDLER) {
+			_MESSAGE("Failed to log playtime.");
+		}
+	}
+
+	void LogException(EXCEPTION_POINTERS* info) {
+		__try {
+			Exception::Process(info);
+		}
+		__except (EXCEPTION_EXECUTE_HANDLER) {
+			_MESSAGE("Failed to log exception.");
+		}
+	}
+
+	void LogCalltrace(EXCEPTION_POINTERS* info) {
+		__try {
+			Calltrace::Process(info);
+		}
+		__except (EXCEPTION_EXECUTE_HANDLER) {
+			_MESSAGE("Failed to log calltrace.");
+		}
+	}
+
+	void LogRegistry(EXCEPTION_POINTERS* info) {
+		__try {
+			Registry::Process(info);
+		}
+		__except (EXCEPTION_EXECUTE_HANDLER) {
+			_MESSAGE("Failed to log registry.");
+		}
+	}
+
+	void LogStack(EXCEPTION_POINTERS* info) {
+		__try {
+			Stack::Process(info);
+		}
+		__except (EXCEPTION_EXECUTE_HANDLER) {
+			_MESSAGE("Failed to log stack.");
+		}
+	}
+
+	void LogInstall(EXCEPTION_POINTERS* info) {
+		__try {
+			Install::Process(info);
+		}
+		__except (EXCEPTION_EXECUTE_HANDLER) {
+			_MESSAGE("Failed to log install.");
+		}
+	}
+
+	void LogMemory(EXCEPTION_POINTERS* info) {
+		__try {
+			Memory::Process(info);
+		}
+		__except (EXCEPTION_EXECUTE_HANDLER) {
+			_MESSAGE("Failed to log memory.");
+		}
+	}
+
 	void Log(EXCEPTION_POINTERS* info)
 	{
 		
 		const auto begin = std::chrono::system_clock::now();
-
-		Playtime::Process(info);
-		_MESSAGE("processing exception");
-		Exception::Process(info);
+		//
+		_MESSAGE("Processing exception");
+		LogPlaytime(info);
+		_MESSAGE("Processing exception");
+		LogException(info);
 		//Thread::Process(info);
-		//Memory::Process(info);
+		_MESSAGE("Processing memory");
+		LogMemory(info);
 		//_MESSAGE("processing device");
 		//Device::Process(info);
-		//_MESSAGE("processing calltrace");
-		_MESSAGE("processing calltrace");
-		Calltrace::Process(info);
-		//_MESSAGE("processing registry");
-		_MESSAGE("processing registry");
-		Registry::Process(info);
-		//_MESSAGE("processing stack");
-		_MESSAGE("processing stack");
-		Stack::Process(info);
+		_MESSAGE("Processing calltrace");
+		LogCalltrace(info);
+		_MESSAGE("Processing registry");
+		LogRegistry(info);
+		_MESSAGE("Processing stack");
+		LogStack(info);
+		//_MESSAGE("Processing mods);
 		//Mods::Process(info)
-		Install::Process(info);
+		_MESSAGE("Processing install");
+		LogInstall(info);
 		//_MESSAGE("processing modules");
 		//Modules::Process(info);
 		//AssetTracker::Process(info);
@@ -173,14 +237,15 @@ namespace CrashLogger
 		//_MESSAGE("%s", Thread::Get().str().c_str());
 		//_MESSAGE("================================");
 		_MESSAGE("%s", Calltrace::Get().str().c_str());
-		_MESSAGE("================================");
+		_MESSAGE("================================\n");
 		_MESSAGE("%s", Registry::Get().str().c_str());
-		_MESSAGE("================================");
+		_MESSAGE("================================\n");
 		_MESSAGE("%s", Stack::Get().str().c_str());
-		_MESSAGE("================================");
+		_MESSAGE("================================\n");
 		//_MESSAGE("%s", Device::Get().str().c_str());
 		//_MESSAGE("================================");
-		//_MESSAGE("%s", Memory::Get().str());
+		_MESSAGE("%s", Memory::Get().str().c_str());
+		_MESSAGE("================================\n");
 		//_MESSAGE("================================");
 		//_MESSAGE("%s", Mods::Get().str());
 		//_MESSAGE("================================");
@@ -188,7 +253,7 @@ namespace CrashLogger
 		//_MESSAGE("================================");
 		Modules::Process(info);
 		//_MESSAGE("%s", Modules::Get().str().c_str());
-		_MESSAGE("================================");
+		_MESSAGE("================================\n");
 		_MESSAGE("%s", Install::Get().str().c_str());
 
 		const auto printing = std::chrono::system_clock::now();
@@ -204,14 +269,16 @@ namespace CrashLogger
 		Safe_SymCleanup(GetCurrentProcess());
 	};
 
+	void AttemptLog(EXCEPTION_POINTERS* info) {
+		__try { Log(info); }
+		__except (EXCEPTION_EXECUTE_HANDLER) {
+			_MESSAGE("Failed to log exception info");
+		};
+	}
+
 	static LPTOP_LEVEL_EXCEPTION_FILTER s_originalFilter = nullptr;
 
 	LONG WINAPI Filter(EXCEPTION_POINTERS* info) {
-
-		//typedef void (*SignalHandlerPointer)(int);
-
-		//SignalHandlerPointer previousHandler;
-		//previousHandler = signal(SIGSEGV, SignalHandler);
 
 		static bool caught = false;
 		bool ignored = false;
@@ -219,8 +286,7 @@ namespace CrashLogger
 		else
 		{
 			caught = true;
-			try { Log(info); }
-			catch (...) {};
+			AttemptLog(info);
 		}
 		if (s_originalFilter) s_originalFilter(info); // don't return
 		return !ignored ? EXCEPTION_CONTINUE_SEARCH : EXCEPTION_EXECUTE_HANDLER;

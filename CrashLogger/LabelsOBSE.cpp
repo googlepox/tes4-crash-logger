@@ -145,6 +145,7 @@ namespace CrashLogger::Labels
 		Push(kVtbl_NiNode, As<NiNode>);
 		Push(kVtbl_NiObjectNET, As<NiObjectNET>);
 		Push(kVtbl_NiExtraData, As<NiExtraData>);
+		Push(kVtbl_NiTriStrips, As<NiTriStrips>);
 		// NiProperty
 		Push(kVtbl_NiVertexColorProperty);
 		//		Push(kVtbl_NiWireframeProperty);

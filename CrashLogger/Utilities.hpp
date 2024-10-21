@@ -1,4 +1,3 @@
-#include <GameForms.h>
 
 inline int ExceptionFilter(unsigned int code)
 {
@@ -142,7 +141,7 @@ inline std::string GetExceptionAsString(UInt32 exceptionMessageID)
 	}
 }
 
-const char* const TypeNames[kType_Count] = {
+const char* const TypeNames[69] = {
 	"None",
 	"TES4",
 	"Group",

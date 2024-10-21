@@ -9,7 +9,6 @@
 #include <mutex>
 #include <vector>
 
-
 namespace CrashLogger::Playtime { inline void Init(); inline void Process(EXCEPTION_POINTERS* info); inline std::stringstream& Get(); }
 namespace CrashLogger::Exception { inline void Process(EXCEPTION_POINTERS* info); inline std::stringstream& Get(); }
 namespace CrashLogger::Thread { inline void Process(EXCEPTION_POINTERS* info); inline std::stringstream& Get(); }
@@ -18,7 +17,7 @@ namespace CrashLogger::Registry { inline void Process(EXCEPTION_POINTERS* info);
 namespace CrashLogger::Stack { inline void Process(EXCEPTION_POINTERS* info); inline std::stringstream& Get(); }
 namespace CrashLogger::Modules { inline void Process(EXCEPTION_POINTERS* info); inline std::stringstream& Get(); }
 namespace CrashLogger::Install { inline void Process(EXCEPTION_POINTERS* info); inline std::stringstream& Get(); }
-//namespace CrashLogger::Memory { inline void Process(EXCEPTION_POINTERS* info); inline std::stringstream& Get(); }
+namespace CrashLogger::Memory { inline void Process(EXCEPTION_POINTERS* info); inline std::stringstream& Get(); }
 //namespace CrashLogger::Mods { inline void Process(EXCEPTION_POINTERS* info); inline std::stringstream& Get(); }
 namespace CrashLogger::Device { inline void Process(EXCEPTION_POINTERS* info); inline std::stringstream& Get(); }
 //namespace CrashLogger::AssetTracker { inline void Process(EXCEPTION_POINTERS* info); inline std::stringstream& Get(); }

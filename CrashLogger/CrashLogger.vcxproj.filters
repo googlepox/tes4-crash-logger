@@ -16,6 +16,7 @@
     <ClCompile Include="Device.cpp" />
     <ClCompile Include="LabelsOBSE.cpp" />
     <ClCompile Include="Logging.cpp" />
+    <ClCompile Include="Memory.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="CrashLogger.hpp" />
