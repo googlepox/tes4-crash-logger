@@ -2,6 +2,7 @@
 #include <psapi.h>
 #include <GameAPI.h>
 #include <Hooks_Memory.cpp>
+#include <PluginManager.h>
 
 #define _WIN32_WINNT 0x0A000010
 
@@ -53,7 +54,16 @@ namespace CrashLogger::Memory
 			_MESSAGE("field40: %u", g_formHeap ->field_040);
 			_MESSAGE("field44: %u", g_formHeap ->field_044);
 			_MESSAGE("field48: %u", g_formHeap ->field_048);
-			_MESSAGE("field4c: %u", g_formHeap ->field_04C);*/
+			_MESSAGE("field4c: %u", g_formHeap ->field_04C);
+			_MESSAGE("field50: %u", g_formHeap ->field_050);
+			_MESSAGE("field54: %u", g_formHeap ->field_054);
+			_MESSAGE("field58: %u", g_formHeap ->field_058);
+			_MESSAGE("field5c: %u", g_formHeap ->field_05C);
+			_MESSAGE("field60: %u", g_formHeap ->field_060);
+			_MESSAGE("field64: %u", g_formHeap ->field_064);
+			_MESSAGE("field168: %u", g_formHeap ->field_168);
+			_MESSAGE("fiel16c: %u", g_formHeap ->field_16C);
+			_MESSAGE("field16d: %u", g_formHeap ->field_16D);*/
 			UInt32 usedHeapMemory = 0;
 			UInt32 totalHeapMemory = 0;
 
@@ -112,7 +122,7 @@ namespace CrashLogger::Memory
 			output << std::format("\nTotal Heap Memory: {}", GetMemoryUsageString(usedHeapMemory, totalHeapMemory)) << '\n';
 			output << std::format("Total Pool Memory: {}", GetMemoryUsageString(uiPoolMemory, uiTotalPoolMemory)) << '\n';
 			output << std::format("Total Memory:      {}", GetMemoryUsageString(usedHeapMemory + uiPoolMemory, totalHeapMemory + uiTotalPoolMemory)) << '\n';
-		} 
+		}
 	}
 	catch (...) { output << "Failed to log memory." << '\n'; }
 

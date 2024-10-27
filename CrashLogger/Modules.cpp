@@ -108,7 +108,7 @@ namespace CrashLogger::Modules
 
 		UserContext infoUser = { eip,  0, (char*)calloc(sizeof(char), 200) };
 
-		Safe_EnumerateLoadedModules(process, EumerateModulesCallback, &infoUser);
+		EnumerateLoadedModules(process, EumerateModulesCallback, &infoUser);
 
 		size_t memoryAllocated = 0;
 

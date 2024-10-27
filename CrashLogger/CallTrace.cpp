@@ -107,7 +107,7 @@ namespace CrashLogger::Calltrace
 			CONTEXT context = {};
 			memcpy(&context, info->ContextRecord, sizeof(CONTEXT));
 
-			Safe_SymSetOptions(SYMOPT_LOAD_LINES | SYMOPT_DEFERRED_LOADS | SYMOPT_UNDNAME | SYMOPT_ALLOW_ABSOLUTE_SYMBOLS);
+			SymSetOptions(SYMOPT_LOAD_LINES | SYMOPT_DEFERRED_LOADS | SYMOPT_UNDNAME | SYMOPT_ALLOW_ABSOLUTE_SYMBOLS);
 
 			char workingDirectory[MAX_PATH];
 			char symbolPath[MAX_PATH];
@@ -118,7 +118,7 @@ namespace CrashLogger::Calltrace
 			std::string lookPath = std::format("{};{}\\Data\\OBSE\\plugins;{};{}", workingDirectory, workingDirectory, symbolPath, altSymbolPath);
 
 			//	SymSetExtendedOption((IMAGEHLP_EXTENDED_OPTIONS)SYMOPT_EX_WINE_NATIVE_MODULES, TRUE);
-			if (!Safe_SymInitialize(process, lookPath.c_str(), true)) {
+			if (!SymInitialize(process, lookPath.c_str(), true)) {
 				output << "Error initializing symbol store" << '\n';
 			}
 				
@@ -138,7 +138,7 @@ namespace CrashLogger::Calltrace
 			output << "Calltrace:" << '\n' << std::format("{:^10} |  {:^40} | {:^40} | Source", "ebp", "Function Address", "Function Name") <<
 				'\n';
 
-			while (Safe_StackWalk(machine, process, thread, &frame, &context, NULL, Safe_SymFunctionTableAccess, Safe_SymGetModuleBase, NULL)) {
+			while (StackWalk(machine, process, thread, &frame, &context, NULL, SymFunctionTableAccess, SymGetModuleBase, NULL)) {
 				/*
 				Using  a PDB for OBSE from VS2019 is causing the frame to repeat, but apparently only if WINEDEBUG=+dbghelp isn't setted. Is this a wine issue?
 				When this happen winedbg show only the first line (this happens with the first frame only probably, even if there are more frames shown when using WINEDEBUG=+dbghelp )

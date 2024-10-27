@@ -13,7 +13,7 @@ namespace CrashLogger::PDB
 	{
 		IMAGEHLP_MODULE module = { 0 };
 		module.SizeOfStruct = sizeof(IMAGEHLP_MODULE);
-		if (!Safe_SymGetModuleInfo(process, eip, &module)) return "";
+		if (!SymGetModuleInfo(process, eip, &module)) return "";
 
 		return module.ModuleName;
 	}
@@ -22,7 +22,7 @@ namespace CrashLogger::PDB
 	{
 		IMAGEHLP_MODULE module = { 0 };
 		module.SizeOfStruct = sizeof(IMAGEHLP_MODULE);
-		if (!Safe_SymGetModuleInfo(process, eip, &module)) return 0;
+		if (!SymGetModuleInfo(process, eip, &module)) return 0;
 
 		return module.BaseOfImage;
 	}
@@ -36,7 +36,7 @@ namespace CrashLogger::PDB
 		symbol->MaxNameLen = 254;
 		DWORD64 offset = 0;
 
-		if (!Safe_SymFromAddr(process, eip, &offset, symbol)) return "";
+		if (!SymFromAddr(process, eip, &offset, symbol)) return "";
 
 		const std::string functioName = symbol->Name;
 
@@ -51,7 +51,7 @@ namespace CrashLogger::PDB
 
 		DWORD offset = 0;
 
-		if (!Safe_SymGetLineFromAddr(process, eip, &offset, line)) return "";
+		if (!SymGetLineFromAddr(process, eip, &offset, line)) return "";
 
 		return std::format("{}:{:d}", line->FileName, line->LineNumber);
 	}
@@ -122,7 +122,7 @@ namespace CrashLogger::PDB
 //		return name.substr(4, name.size() - 6);
 
 		char buffer[MAX_PATH];
-		Safe_UnDecorateSymbolName(name.substr(1, name.size() - 1).c_str(), buffer, MAX_PATH, UNDNAME_NO_ARGUMENTS);
+		UnDecorateSymbolName(name.substr(1, name.size() - 1).c_str(), buffer, MAX_PATH, UNDNAME_NO_ARGUMENTS);
 		name = buffer;
 
 		return name.substr(6, name.size() - 6);
@@ -266,7 +266,7 @@ namespace CrashLogger
 
 		//Logger::Copy();
 
-		Safe_SymCleanup(GetCurrentProcess());
+		SymCleanup(GetCurrentProcess());
 	};
 
 	void AttemptLog(EXCEPTION_POINTERS* info) {

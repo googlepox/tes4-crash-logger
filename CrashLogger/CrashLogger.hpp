@@ -1,6 +1,5 @@
 #pragma once
 #include <IDebugLog.h>
-#include <DbgHelpWrapper.hpp>
 #include <Utilities.hpp>
 #include <format>
 #include <string>

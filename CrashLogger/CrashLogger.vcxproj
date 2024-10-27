@@ -130,7 +130,6 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="CallTrace.cpp" />
-    <ClCompile Include="DbgHelpWrapper.cpp" />
     <ClCompile Include="Definitions.cpp" />
     <ClCompile Include="Device.cpp" />
     <ClCompile Include="dllmain.c">
@@ -148,7 +147,6 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="CrashLogger.hpp" />
-    <ClInclude Include="DbgHelpWrapper.hpp" />
     <ClInclude Include="Definitions.hpp" />
     <ClInclude Include="ExceptionHandler.hpp" />
     <ClInclude Include="Formatter.hpp" />

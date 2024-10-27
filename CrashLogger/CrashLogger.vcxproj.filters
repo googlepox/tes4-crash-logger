@@ -9,7 +9,6 @@
     <ClCompile Include="dllmain.c" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Definitions.cpp" />
-    <ClCompile Include="DbgHelpWrapper.cpp" />
     <ClCompile Include="CallTrace.cpp" />
     <ClCompile Include="RegistryStack.cpp" />
     <ClCompile Include="Modules.cpp" />
@@ -20,7 +19,6 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="CrashLogger.hpp" />
-    <ClInclude Include="DbgHelpWrapper.hpp" />
     <ClInclude Include="ExceptionHandler.hpp" />
     <ClInclude Include="Definitions.hpp" />
     <ClInclude Include="Utilities.hpp" />

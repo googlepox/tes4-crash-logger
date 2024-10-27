@@ -108,7 +108,7 @@ namespace CrashLogger::Labels
 		Push(kVtbl_TESWeather);
 		Push(kVtbl_TESWorldSpace);
 
-		Push(kVtbl_TESPackage);
+		Push(kVtbl_TESPackage, As<TESPackage>);
 		Push(kVtbl_AlarmPackage);
 		Push(kVtbl_DialoguePackage);
 		Push(kVtbl_FleePackage);
