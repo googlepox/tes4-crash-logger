@@ -73,7 +73,7 @@ namespace CrashLogger::Memory
 
 			UInt8* mainHeap = (UInt8*)g_formHeap->field_018;
 			UInt8* mainHeapEnd = mainHeap + g_formHeap->field_00C;
-			SIZE_T used = g_formHeap->field_01C;
+			SIZE_T used = g_formHeap->field_014;
 			SIZE_T total = g_formHeap->field_00C;
 #if PRINT_HEAPS
 			SIZE_T start = reinterpret_cast<std::uintptr_t>(mainHeap);
