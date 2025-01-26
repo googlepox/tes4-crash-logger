@@ -157,6 +157,15 @@ namespace CrashLogger
 		}
 	}
 
+	void LogThread(EXCEPTION_POINTERS* info) {
+		__try {
+			Thread::Process(info);
+		}
+		__except (EXCEPTION_EXECUTE_HANDLER) {
+			_MESSAGE("Failed to log thread.");
+		}
+	}
+
 	void LogCalltrace(EXCEPTION_POINTERS* info) {
 		__try {
 			Calltrace::Process(info);
@@ -202,6 +211,15 @@ namespace CrashLogger
 		}
 	}
 
+	void LogDevice(EXCEPTION_POINTERS* info) {
+		__try {
+			Device::Process(info);
+		}
+		__except (EXCEPTION_EXECUTE_HANDLER) {
+			_MESSAGE("Failed to log device.");
+		}
+	}
+
 	void Log(EXCEPTION_POINTERS* info)
 	{
 		
@@ -211,11 +229,12 @@ namespace CrashLogger
 		LogPlaytime(info);
 		_MESSAGE("Processing exception");
 		LogException(info);
-		//Thread::Process(info);
+		_MESSAGE("Processing thread");
+		LogThread(info);
 		_MESSAGE("Processing memory");
 		LogMemory(info);
-		//_MESSAGE("processing device");
-		//Device::Process(info);
+		//_MESSAGE("Processing device");
+		//LogDevice(info);
 		_MESSAGE("Processing calltrace");
 		LogCalltrace(info);
 		_MESSAGE("Processing registry");
@@ -234,8 +253,8 @@ namespace CrashLogger
 
 		_MESSAGE("%s", Playtime::Get().str().c_str());
 		_MESSAGE("%s", Exception::Get().str().c_str());
-		//_MESSAGE("%s", Thread::Get().str().c_str());
-		//_MESSAGE("================================");
+		_MESSAGE("%s", Thread::Get().str().c_str());
+		_MESSAGE("================================");
 		_MESSAGE("%s", Calltrace::Get().str().c_str());
 		_MESSAGE("================================\n");
 		_MESSAGE("%s", Registry::Get().str().c_str());
