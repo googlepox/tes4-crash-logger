@@ -207,7 +207,7 @@ namespace CrashLogger
 		
 		const auto begin = std::chrono::system_clock::now();
 		//
-		_MESSAGE("Processing exception");
+		_MESSAGE("Processing playtime");
 		LogPlaytime(info);
 		_MESSAGE("Processing exception");
 		LogException(info);
@@ -264,7 +264,7 @@ namespace CrashLogger
 
 		_MESSAGE("%s", std::format("Processed in {:d} ms, printed in {:d} ms", timeProcessing.count(), timePrinting.count()).c_str());
 
-		//Logger::Copy();
+		Logger::Copy();
 
 		SymCleanup(GetCurrentProcess());
 	};
