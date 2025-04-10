@@ -1,5 +1,4 @@
 #include "obse/PluginAPI.h"
-#include "obse/CommandTable.h"
 
 #include <Definitions.hpp>
 #include "CrashLogger.hpp"

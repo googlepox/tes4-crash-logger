@@ -29,4 +29,7 @@
   <ItemGroup>
     <None Include="exports.def" />
   </ItemGroup>
+  <ItemGroup>
+    <Library Include="obse.lib" />
+  </ItemGroup>
 </Project>

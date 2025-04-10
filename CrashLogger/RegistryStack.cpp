@@ -149,13 +149,11 @@ namespace CrashLogger::Stack
 		if (GetStringForRTTIorPDB(object, buffer)) {
 			return true;
 		}
-		/*
 		if (GetAsString(object, labelName, description))
 		{
-			_MESSAGE("inside third if");
 			buffer += std::format("0x{:08X} ==> ", *(UInt32*)object) + labelName + ": " + '"' + description + '"';
 			return true;
-		} */
+		}
 		return false;
 	}
 	catch (...) {

@@ -1,5 +1,4 @@
 #include <CrashLogger.hpp>
-#include <NiRenderer.h>
 
 namespace CrashLogger::Device
 {

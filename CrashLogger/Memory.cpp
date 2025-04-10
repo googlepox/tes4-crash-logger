@@ -1,10 +1,7 @@
 #include <CrashLogger.hpp>
 #include <psapi.h>
 #include <GameAPI.h>
-#include <Hooks_Memory.cpp>
 #include <PluginManager.h>
-
-#define _WIN32_WINNT 0x0A000010
 
 #define PRINT_HEAPS 1
 #define PRINT_POOLS 0
@@ -35,35 +32,7 @@ namespace CrashLogger::Memory
 			output << std::format("Virtual  Usage: {}", GetMemoryUsageString(virtUsage, memoryStatus.ullTotalVirtual)) << '\n';
 		}
 
-		// If NVHR is used, the number will be 0
 		if (g_formHeap) {
-			/*_MESSAGE("field4: %u", g_formHeap->field_004);
-			_MESSAGE("field8: %u", g_formHeap->field_008);
-			_MESSAGE("fieldc: %u", g_formHeap->field_00C);
-			_MESSAGE("field10: %u", g_formHeap->field_010);
-			_MESSAGE("field14: %u", g_formHeap->field_014);
-			_MESSAGE("field18: %u", g_formHeap->field_018);
-			_MESSAGE("field1c: %u", g_formHeap->field_01C);
-			_MESSAGE("field20: %u", g_formHeap->field_020);
-			_MESSAGE("field24: %u", g_formHeap->field_024);
-			_MESSAGE("field28: %u", g_formHeap ->field_028);
-			_MESSAGE("field30: %u", g_formHeap ->field_030);
-			_MESSAGE("field34: %u", g_formHeap ->field_034);
-			_MESSAGE("field38: %u", g_formHeap ->field_038);
-			_MESSAGE("field3c: %u", g_formHeap ->field_03C);
-			_MESSAGE("field40: %u", g_formHeap ->field_040);
-			_MESSAGE("field44: %u", g_formHeap ->field_044);
-			_MESSAGE("field48: %u", g_formHeap ->field_048);
-			_MESSAGE("field4c: %u", g_formHeap ->field_04C);
-			_MESSAGE("field50: %u", g_formHeap ->field_050);
-			_MESSAGE("field54: %u", g_formHeap ->field_054);
-			_MESSAGE("field58: %u", g_formHeap ->field_058);
-			_MESSAGE("field5c: %u", g_formHeap ->field_05C);
-			_MESSAGE("field60: %u", g_formHeap ->field_060);
-			_MESSAGE("field64: %u", g_formHeap ->field_064);
-			_MESSAGE("field168: %u", g_formHeap ->field_168);
-			_MESSAGE("fiel16c: %u", g_formHeap ->field_16C);
-			_MESSAGE("field16d: %u", g_formHeap ->field_16D);*/
 			UInt32 usedHeapMemory = 0;
 			UInt32 totalHeapMemory = 0;
 

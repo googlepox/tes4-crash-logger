@@ -46,21 +46,28 @@ inline auto LogClass(TESForm& obj)
 		if (refName.empty())
 		{
 			if (!&obj) {
-				refName = std::format("Temp {} ({})", TypeNames[obj.typeID], "NULL");
+				refName = std::format("Temp {} (null baseRef?)", TypeNames[obj.typeID]);
 			}
 			else {
-				refName = std::format("Temp {}", TypeNames[obj.typeID]);
+				refName = std::format("Temp {} ({})", TypeNames[obj.typeID], obj.GetName());
 			}
 		}
 		vec.push_back(std::format("ID: {:08X} ({})", refID, refName));
 	}
 	else if (modIndex != 0xFF) {
 		std::string modName = (*g_dataHandler)->GetNthModName(modIndex);
-		
-		vec.push_back(std::format("ID: {:08X} ({}) : (Plugin: \"{}\")", refID, refName, modName));
 
-		//if (sourceMod != lastMod)
-			//vec.push_back(modName = std::format(R"(Last modified by: "{}")", lastMod->m_Filename));
+		ModEntry::Data* sourceMod = (ModEntry::Data*)obj.modRefList.Info();
+		ModRefListVisitor newVisitor = ModRefListVisitor(&obj.modRefList);
+		ModEntry::Data* lastMod = (ModEntry::Data*)newVisitor.GetLastNode()->Info();
+
+		if (sourceMod != lastMod) {
+			modName = std::format("\"{}\" (Last modified by: \"{}\")", modName, lastMod->name);
+		}
+		else {
+			modName = std::format("\"{}\"", modName);
+		}
+		vec.push_back(std::format("ID: {:08X} ({}) : (Plugin: {})", refID, refName, modName));
 	}
 	return vec;
 }
@@ -77,7 +84,7 @@ inline auto LogClass(TESPathGrid& obj)
 {
 	auto vec = LogClass(static_cast<TESForm&>(obj));
 	if (obj.theChildCell)
-		vec.append_range(LogMember("Cell:", static_cast<TESForm&>(*obj.theChildCell)));
+		vec.append_range(LogMember("\t \t \t \t \t Cell:", static_cast<TESForm&>(*obj.theChildCell)));
 	return vec;
 }
 

@@ -1,5 +1,5 @@
 #pragma once
-#include <IDebugLog.h>
+#include <common/IDebugLog.h>
 #include <Utilities.hpp>
 #include <format>
 #include <string>

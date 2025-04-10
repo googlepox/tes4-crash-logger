@@ -642,5 +642,43 @@ namespace CrashLogger::Labels
 		Push(kVtbl_bhkWorldObject);
 		Push(kVtbl_hkpAabbPhantom);
 
+		Push(kVtbl_GrassLoadTask);
+		Push(kVtbl_WaterShader);
+		Push(kVtbl_BSShaderProperty);
+		Push(kVtbl_ShadowSceneLight);
+		Push(kVtbl_BSRenderedTexture);
+		Push(kVtbl_ParticleShader);
+		Push(kVtbl_TallGrassShader);
+		Push(kVtbl_BSShaderLightingProperty);
+		Push(kVtbl_PrecipitationShader);
+		Push(kVtbl_BSShader);
+		Push(kVtbl_BSImageSpaceShader);
+		Push(kVtbl_GeometryDecalShader);
+		Push(kVtbl_SkinShader);
+		Push(kVtbl_HairShader);
+		Push(kVtbl_DistantLODShader);
+		Push(kVtbl_BSCubeMapCamera);
+		Push(kVtbl_WaterShaderProperty);
+		Push(kVtbl_TallGrassTriStrips);
+		Push(kVtbl_TallGrassTriShape);
+		Push(kVtbl_GeometryDecalShaderProperty);
+		Push(kVtbl_HairShaderProperty);
+		Push(kVtbl_hkMemory);
+		Push(kVtbl_hkShapeCollectionFilter);
+		Push(kVtbl_hkRayShapeCollectionFilter);
+		Push(kVtbl_ahkWorld);
+		Push(kVtbl_hkCollidableCollidableFilter);
+		Push(kVtbl_hkRayCollidableFilter);
+		Push(kVtbl_bhkMemory);
+		Push(kVtbl_bhkWorld);
+		Push(kVtbl_hkFirstCdBodyPairCollector);
+		Push(kVtbl_bhkAvoidBox);
+		Push(kVtbl_hkAvoidBox);
+		Push(kVtbl_bhkBlendCollisionObject);
+		Push(kVtbl_bhkCharacterListener);
+		Push(kVtbl_bhkShapeCollection);
+		Push(kVtbl_bhkCharacterProxy);
+		Push(kVtbl_bhkListShape);
+
 	};
 }
