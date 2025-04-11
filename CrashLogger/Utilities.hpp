@@ -1,3 +1,4 @@
+#include <format>
 
 inline int ExceptionFilter(unsigned int code)
 {

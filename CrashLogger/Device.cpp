@@ -1,4 +1,4 @@
-#include <CrashLogger.hpp>
+#include "CrashLogger.hpp"
 
 namespace CrashLogger::Device
 {
