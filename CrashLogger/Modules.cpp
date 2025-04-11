@@ -1,5 +1,5 @@
-#include <CrashLogger.hpp>
-#include <Utilities.h>
+#include "CrashLogger.hpp"
+#include "Utilities.h"
 
 #pragma comment (lib, "version.lib")
 

@@ -1,6 +1,6 @@
-#include <CrashLogger.hpp>
+#include "CrashLogger.hpp"
 #include <obse_common/SafeWrite.h>
-#include <Logging.hpp>
+#include "Logging.hpp"
 #include <signal.h>
 
 #define SYMOPT_EX_WINE_NATIVE_MODULES 1000

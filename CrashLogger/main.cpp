@@ -1,8 +1,8 @@
 #include "obse/PluginAPI.h"
 
-#include <Definitions.hpp>
+#include "Definitions.hpp"
 #include "CrashLogger.hpp"
-#include <Logging.hpp>
+#include "Logging.hpp"
 #include <iostream>
 
 IDebugLog    gLog("CrashLogger.log");
