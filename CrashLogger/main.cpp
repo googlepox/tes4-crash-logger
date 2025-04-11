@@ -46,7 +46,7 @@ extern "C" {
       // fill out the info structure
       info->infoVersion = PluginInfo::kInfoVersion;
       info->name        = "CrashLoggerImproved";
-      info->version     = 0x01040000; // major, minor, patch, build
+      info->version     = 0x01050100; // major, minor, patch, build
 
       {  // log our version number -- be helpful!
          auto v = info->version;

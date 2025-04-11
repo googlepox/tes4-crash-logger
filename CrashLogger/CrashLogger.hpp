@@ -105,7 +105,7 @@ namespace CrashLogger
 			//			if (vtables_.find(vtable) == vtables_.end()) return false;
 
 			UInt32 vtable = *reinterpret_cast<UInt32*>(pointer);
-			if (vtable > 0xA20000 && vtable < 0xAB0000)
+			if (vtable > 0xA283D0 && vtable < 0xAB0000)
 				return true;
 
 			return false;

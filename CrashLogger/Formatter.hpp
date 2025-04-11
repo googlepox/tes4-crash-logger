@@ -75,8 +75,13 @@ inline auto LogClass(TESForm& obj)
 inline auto LogClass(TESObjectREFR& obj)
 {
 	auto vec = LogClass(static_cast<TESForm&>(obj));
-	if (const auto baseForm = obj.TryGetREFRParent())
+	TESForm* baseForm = obj.baseForm;
+	if (baseForm) {
 		vec.append_range(LogMember("\t \t \t \t \t BaseForm:", *baseForm));
+	}
+	else {
+		vec.push_back("\t \t \t \t \t BaseForm: NULL");
+	}
 	return vec;
 }
 
