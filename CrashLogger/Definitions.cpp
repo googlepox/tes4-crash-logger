@@ -1,5 +1,5 @@
-#include <Definitions.hpp>
-#include <CrashLogger.hpp>
+#include "Definitions.hpp"
+#include "CrashLogger.hpp"
 
 #define INIT_MODULE(mod) namespace mod { extern void Init(); }
 

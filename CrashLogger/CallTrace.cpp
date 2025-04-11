@@ -1,5 +1,5 @@
-#include <CrashLogger.hpp>
-#include <ExceptionHandler.hpp>
+#include "CrashLogger.hpp"
+#include "ExceptionHandler.hpp"
 
 namespace CrashLogger::Playtime
 {

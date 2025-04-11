@@ -1,7 +1,7 @@
-#include <CrashLogger.hpp>
+#include "CrashLogger.hpp"
 #include <psapi.h>
-#include <GameAPI.h>
-#include <PluginManager.h>
+#include "GameAPI.h"
+#include "PluginManager.h"
 
 #define PRINT_HEAPS 1
 #define PRINT_POOLS 0
@@ -16,7 +16,7 @@ namespace CrashLogger::Memory
 		const auto hProcess = GetCurrentProcess();
 
 
-		PROCESS_MEMORY_COUNTERS_EX2 pmc = {};
+		PROCESS_MEMORY_COUNTERS_EX pmc = {};
 		pmc.cb = sizeof(pmc);
 
 		// Get physical memory size
