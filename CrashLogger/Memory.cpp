@@ -1,7 +1,7 @@
 #include "CrashLogger.hpp"
 #include <psapi.h>
-#include <GameAPI.h>
-#include <PluginManager.h>
+#include "GameAPI.h"
+#include "PluginManager.h"
 
 #define PRINT_HEAPS 1
 #define PRINT_POOLS 0

@@ -1,5 +1,5 @@
 #include "CrashLogger.hpp"
-#include <obse_common/SafeWrite.h>
+#include "SafeWrite.h"
 #include "Logging.hpp"
 #include <signal.h>
 

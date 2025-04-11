@@ -1,4 +1,4 @@
-#include "obse/PluginAPI.h"
+#include "PluginAPI.h"
 
 #include "Definitions.hpp"
 #include "CrashLogger.hpp"
