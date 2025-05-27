@@ -42,6 +42,7 @@ inline auto LogClass(TESForm& obj)
 	UInt32 modIndex = refID >> 24;
 	std::string modName;
 	std::string refName = obj.GetEditorName();
+	std::string  loaded = obj.flags &  TESForm::FormFlags::kFormFlags_Linked ? "" : "<Not Linked>";
 	if (modIndex == 0xFF) {
 		if (refName.empty())
 		{
@@ -52,7 +53,7 @@ inline auto LogClass(TESForm& obj)
 				refName = std::format("Temp {} ({})", TypeNames[obj.typeID], obj.GetName());
 			}
 		}
-		vec.push_back(std::format("ID: {:08X} ({})", refID, refName));
+		vec.push_back(std::format("ID: {:08X} ({}) {}", refID, refName, loaded));
 	}
 	else if (modIndex != 0xFF) {
 		std::string modName = (*g_dataHandler)->GetNthModName(modIndex);
@@ -67,7 +68,7 @@ inline auto LogClass(TESForm& obj)
 		else {
 			modName = std::format("\"{}\"", modName);
 		}
-		vec.push_back(std::format("ID: {:08X} ({}) : (Plugin: {})", refID, refName, modName));
+		vec.push_back(std::format("ID: {:08X} ({}) : (Plugin: {}) {}", refID, refName, modName, loaded));
 	}
 	return vec;
 }
@@ -105,7 +106,7 @@ inline std::vector<std::string>  LogClass(const BaseProcess& obj)
 			&& reinterpret_cast<Actor*>(iter)->pkBaseProcess == &obj)
 			return LogClass(reinterpret_cast<const TESObjectREFR&>(*iter));
 	return {};
-} 
+}
 
 inline auto LogClass(const NiControllerSequence& obj)
 {
@@ -135,7 +136,7 @@ inline std::vector<std::string> LogClass(const AnimSequenceMultiple& obj)
 		vec.append_range(LogMember(std::format("AnimSequence{}", i), *iter));
 	}
 	return vec;
-} 
+}
 
 inline std::vector<std::string> LogClass(const NiExtraData& obj)
 {
@@ -266,7 +267,7 @@ inline std::vector<std::string> LogClass(const hkpWorldObject& obj)
 		vec.append_range(LogMember("Collision Object:", reinterpret_cast<const NiCollisionObject&>(*object)));
 
 	return vec;
-} 
+}
 
 inline std::vector<std::string> LogClass(const IMemoryHeap& obj)
 {

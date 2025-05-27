@@ -297,9 +297,34 @@ namespace CrashLogger
 
 	static LPTOP_LEVEL_EXCEPTION_FILTER s_originalFilter = nullptr;
 
+	static PVOID handle;
+
+	static bool caught = false;
+
+	LONG WINAPI LogVectored(EXCEPTION_POINTERS* ExceptionInfo) {
+		if (ExceptionInfo->ExceptionRecord->ExceptionCode == 0x406D1388) {
+			//Log(ExceptionInfo);
+			return EXCEPTION_CONTINUE_EXECUTION;
+		}
+		if(ExceptionInfo->ExceptionRecord->ExceptionCode == 0x40010006){
+			_MESSAGE("%s",   reinterpret_cast<char*>(ExceptionInfo->ExceptionRecord->ExceptionInformation[1]));
+			return EXCEPTION_CONTINUE_EXECUTION;
+		}
+		if (!caught) {
+			caught = true;
+			_MESSAGE("From Vectored Handler");
+			AttemptLog(ExceptionInfo);
+
+			RemoveVectoredExceptionHandler(handle);
+		}
+		return EXCEPTION_CONTINUE_SEARCH;
+	}
+	void AddVectoredException() {
+		handle = AddVectoredExceptionHandler(0, &LogVectored);
+	}
+
 	LONG WINAPI Filter(EXCEPTION_POINTERS* info) {
 
-		static bool caught = false;
 		bool ignored = false;
 		if (caught) ignored = true;
 		else
@@ -307,8 +332,8 @@ namespace CrashLogger
 			caught = true;
 			AttemptLog(info);
 		}
-		if (s_originalFilter) s_originalFilter(info); // don't return
-		return !ignored ? EXCEPTION_CONTINUE_SEARCH : EXCEPTION_EXECUTE_HANDLER;
+		if (s_originalFilter) return s_originalFilter(info);
+		return  EXCEPTION_CONTINUE_SEARCH;
 	};
 
 	LPTOP_LEVEL_EXCEPTION_FILTER WINAPI FakeSetUnhandledExceptionFilter(__in LPTOP_LEVEL_EXCEPTION_FILTER lpTopLevelExceptionFilter) {
@@ -323,5 +348,6 @@ namespace CrashLogger
 		s_originalFilter = SetUnhandledExceptionFilter(&Filter);
 
 		SafeWrite32(0x00A281B4, (UInt32)&FakeSetUnhandledExceptionFilter);
+		AddVectoredException();
 	}
 }
