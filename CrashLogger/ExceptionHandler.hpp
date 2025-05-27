@@ -138,6 +138,10 @@ namespace CrashLogger::PDB
 
 namespace CrashLogger
 {
+	void trans_func( unsigned int u, EXCEPTION_POINTERS* pExp )
+	{
+		throw SE_Exception();
+	}
 
 	void LogPlaytime(EXCEPTION_POINTERS* info) {
 		__try {
@@ -180,7 +184,7 @@ namespace CrashLogger
 			Registry::Process(info);
 		}
 		__except (EXCEPTION_EXECUTE_HANDLER) {
-			_MESSAGE("Failed to log registry.");
+			_MESSAGE("Failed to log registers.");
 		}
 	}
 
@@ -222,9 +226,8 @@ namespace CrashLogger
 
 	void Log(EXCEPTION_POINTERS* info)
 	{
-		
 		const auto begin = std::chrono::system_clock::now();
-		//
+
 		_MESSAGE("Processing playtime");
 		LogPlaytime(info);
 		_MESSAGE("Processing exception");
@@ -237,7 +240,7 @@ namespace CrashLogger
 		//LogDevice(info);
 		_MESSAGE("Processing calltrace");
 		LogCalltrace(info);
-		_MESSAGE("Processing registry");
+		_MESSAGE("Processing registers");
 		LogRegistry(info);
 		_MESSAGE("Processing stack");
 		LogStack(info);

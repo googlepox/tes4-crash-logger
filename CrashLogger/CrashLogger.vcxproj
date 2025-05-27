@@ -107,6 +107,7 @@
       <OptimizeReferences>true</OptimizeReferences>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <TargetMachine>MachineX86</TargetMachine>
+     <ExceptionHandling>Async</ExceptionHandling>
     </Link>
     <PostBuildEvent>
       <Message>

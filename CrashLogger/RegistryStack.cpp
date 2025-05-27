@@ -35,6 +35,8 @@ namespace CrashLogger
 
 	bool GetAsString(const void* object, std::string& labelName, std::string& string)
 	{
+		//if(IsBadReadPtr(object, 1)) return false;
+
 		try {
 			const auto printable = [](const char a_ch) noexcept {
 				if (' ' <= a_ch && a_ch <= '~') return true;
@@ -59,7 +61,7 @@ namespace CrashLogger
 			if (len == 0 || len >= max || len < 3) return false;
 			const auto str = SanitizeString(cstr);
 			// Check if string is equal to a predefined prefix and print out the file name if true
-			if (const auto pos = str.find("D:\\_Fallout3\\"); pos == std::string::npos) {
+			if (const auto pos = str.find("D:\\_Oblivion\\"); pos == std::string::npos) {
 				labelName = "String";
 				string = str;
 			}
@@ -138,14 +140,14 @@ namespace CrashLogger::Stack
 	catch (...) { return false; }
 
 
-	bool GetStringForLabel(void** object, std::string& buffer)
-		try {
+	bool GetRealStringForLabel(void** object, std::string& buffer){
 		std::string labelName, objectName, description;
 		if (GetStringForClassLabel(object, labelName, objectName, description))
 		{
 			buffer += std::format("0x{:08X} ==> ", *(UInt32*)object) + labelName + ": " + objectName + ": " + description;
 			return true;
 		}
+
 		if (GetStringForRTTIorPDB(object, buffer)) {
 			return true;
 		}
@@ -154,10 +156,17 @@ namespace CrashLogger::Stack
 			buffer += std::format("0x{:08X} ==> ", *(UInt32*)object) + labelName + ": " + '"' + description + '"';
 			return true;
 		}
+
 		return false;
 	}
-	catch (...) {
-		return false;
+
+	bool GetStringForLabel(void** object, std::string& buffer){
+		__try {
+			return GetRealStringForLabel(object, buffer );
+		}
+		__except(EXCEPTION_EXECUTE_HANDLER){
+			return false;
+		}
 	}
 
 	std::string GetLineForObject(void** object, UInt32 depth)
