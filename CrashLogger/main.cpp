@@ -78,9 +78,10 @@ extern "C" {
    bool OBSEPlugin_Load(const OBSEInterface* obse) {
       g_pluginHandle = obse->GetPluginHandle();
       
-      if (!obse->isEditor)
+      if (!obse->isEditor){
           InitLog(GetCurPath());
           Inits();
+      }
           //CobbPatches::CrashLog::Apply(false);
       return true;
    }

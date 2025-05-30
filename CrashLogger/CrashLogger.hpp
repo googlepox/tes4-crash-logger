@@ -37,6 +37,13 @@ namespace CrashLogger::PDB
 
 namespace CrashLogger
 {
+	class SE_Exception
+	{
+	public:
+		SE_Exception() {}
+		~SE_Exception() {}
+	};
+
 	template<typename T>
 	class Dereference {
 		intptr_t pointer;
@@ -57,6 +64,7 @@ namespace CrashLogger
 			if (IsValidPointer()) {
 				return reinterpret_cast<T*>(pointer);
 			}
+			return nullptr;
 
 			//throw std::runtime_error("Bad dereference");
 		}
@@ -65,7 +73,7 @@ namespace CrashLogger
 			if (IsValidPointer()) {
 				return reinterpret_cast<T*>(pointer);
 			}
-
+			return nullptr;
 			//throw std::runtime_error("Bad dereference");
 		}
 
