@@ -37,8 +37,12 @@ public:
 
 	~LoggerManager()
 	{
+		stop = true;
 		condition.notify_one();
-		worker.join();
+		if (worker.joinable())
+		{
+			worker.join();
+		}
 	}
 
 	void play() { worker = std::thread([this] { processQueue(); }); }

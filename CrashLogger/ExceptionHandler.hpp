@@ -313,9 +313,12 @@ namespace CrashLogger
 			_MESSAGE("%s",   reinterpret_cast<char*>(ExceptionInfo->ExceptionRecord->ExceptionInformation[1]));
 			return EXCEPTION_CONTINUE_EXECUTION;
 		}
+		if (ExceptionInfo->ExceptionRecord->ExceptionCode == 0xE06D7363) {
+			return EXCEPTION_CONTINUE_EXECUTION;
+		}
 		if (!caught) {
 			caught = true;
-			_MESSAGE("From Vectored Handler");
+			//_MESSAGE("From Vectored Handler");
 			AttemptLog(ExceptionInfo);
 
 			RemoveVectoredExceptionHandler(handle);
