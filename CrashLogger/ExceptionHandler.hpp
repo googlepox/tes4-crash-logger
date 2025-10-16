@@ -31,15 +31,11 @@ namespace CrashLogger::PDB
 	{
 		char symbolBuffer[sizeof(SYMBOL_INFO) + 255];
 		const auto symbol = (SYMBOL_INFO*)symbolBuffer;
-
 		symbol->SizeOfStruct = sizeof(SYMBOL_INFO);
 		symbol->MaxNameLen = 254;
 		DWORD64 offset = 0;
-
 		if (!SymFromAddr(process, eip, &offset, symbol)) return "";
-
 		const std::string functioName = symbol->Name;
-
 		return std::format("{}+0x{:0X}", functioName, offset);
 	}
 
@@ -97,6 +93,7 @@ namespace CrashLogger::PDB
 			RTTILocator* rtti = vtbl[-1];
 			RTTIType* type = rtti->type;
 
+			if (!type) return "";
 			// starts with .?AV
 			if ((type->name[0] == '.') && (type->name[1] == '?'))
 			{
@@ -118,6 +115,7 @@ namespace CrashLogger::PDB
 	std::string GetClassNameFromRTTI(void* object)
 	{
 		std::string name = GetObjectClassNameInternal2(object);
+		if (name.empty()) return name;
 		// Starts with .?AV, ends with @@
 //		return name.substr(4, name.size() - 6);
 
@@ -313,9 +311,6 @@ namespace CrashLogger
 			_MESSAGE("%s",   reinterpret_cast<char*>(ExceptionInfo->ExceptionRecord->ExceptionInformation[1]));
 			return EXCEPTION_CONTINUE_EXECUTION;
 		}
-		if (ExceptionInfo->ExceptionRecord->ExceptionCode == 0xE06D7363) {
-			return EXCEPTION_CONTINUE_EXECUTION;
-		}
 		if (!caught) {
 			caught = true;
 			//_MESSAGE("From Vectored Handler");
@@ -354,6 +349,9 @@ namespace CrashLogger
 		s_originalFilter = SetUnhandledExceptionFilter(&Filter);
 
 		SafeWrite32(0x00A281B4, (UInt32)&FakeSetUnhandledExceptionFilter);
+
+		Memory::InstallAllocHook();
+		
 		AddVectoredException();
 	}
 }

@@ -114,12 +114,12 @@ namespace CrashLogger::Calltrace
 			char altSymbolPath[MAX_PATH];
 			GetCurrentDirectory(MAX_PATH, workingDirectory);
 			GetEnvironmentVariable("_NT_SYMBOL_PATH", symbolPath, MAX_PATH);
-			GetEnvironmentVariable("_NT_ALTERNATE_SYMBOL_PATH ", altSymbolPath, MAX_PATH);
+			GetEnvironmentVariable("_NT_ALTERNATE_SYMBOL_PATH", altSymbolPath, MAX_PATH);
 			std::string lookPath = std::format("{};{}\\Data\\OBSE\\plugins;{};{}", workingDirectory, workingDirectory, symbolPath, altSymbolPath);
 
 			//	SymSetExtendedOption((IMAGEHLP_EXTENDED_OPTIONS)SYMOPT_EX_WINE_NATIVE_MODULES, TRUE);
 			if (!SymInitialize(process, lookPath.c_str(), true)) {
-				output << "Error initializing symbol store" << '\n';
+				//output << "Error initializing symbol store" << '\n';
 			}
 				
 
