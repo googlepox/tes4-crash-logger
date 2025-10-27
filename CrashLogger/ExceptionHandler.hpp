@@ -351,6 +351,7 @@ namespace CrashLogger
 		SafeWrite32(0x00A281B4, (UInt32)&FakeSetUnhandledExceptionFilter);
 
 		Memory::InstallAllocHook();
+		Memory::InstallFreeHook();
 		
 		AddVectoredException();
 	}

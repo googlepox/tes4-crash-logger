@@ -10,94 +10,329 @@
 namespace CrashLogger::Memory
 {
 	std::stringstream output;
-	std::map<UInt32, UInt32> allocMap;
-	static const UInt32 TARGET = 0x00401F00;
-	static uint8_t g_origBytes[16] = { 0 };
-	static size_t  g_patchSize = 6;
-	static uint8_t* g_trampoline = nullptr;
-	typedef void* (__cdecl* FormHeapAllocate_t)(size_t);
-	static FormHeapAllocate_t g_originalAlloc = nullptr;
 
-	// Helper: create trampoline copying g_patchSize bytes + jmp back
-	bool CreateTrampoline()
+	constexpr uintptr_t TARGET_ALLOC = 0x00401F00;
+	constexpr uintptr_t TARGET_FREE = 0x00401F20;
+	constexpr size_t PATCH_SIZE = 6;
+
+	// globals for trampoline pointers and original function pointers
+	using Alloc_t = void* (__cdecl*)(size_t);
+	using Free_t = void(__cdecl*)(void*);
+
+	Alloc_t g_origAlloc = nullptr;
+	Free_t  g_origFree = nullptr;
+	void* g_allocTramp = nullptr;
+	void* g_freeTramp = nullptr;
+
+	struct AllocInfo { uint32_t caller; uint32_t size; };
+	static std::unordered_map<void*, AllocInfo> g_activeAllocs;
+	static std::mutex g_allocMutex;
+
+	constexpr size_t THREAD_BUF_SZ = 1 << 18;   // 4096 entries per thread (tune)
+	constexpr size_t MAX_THREAD_LOGS = 64;
+
+	std::atomic<uint64_t> g_totalActiveBytes{ 0 };
+
+	// ---------- event struct ----------
+	struct AllocEvent {
+		void* ptr;
+		uint32_t size;
+		uint32_t caller;   // RVA/VA as uint32
+		uint8_t  kind;     // 0 = alloc, 1 = free
+		uint8_t  pad[3];
+	};
+
+	// ---------- per-thread buffer ----------
+	struct ThreadLog {
+		// circular/append-only buffer (single-producer: the thread)
+		AllocEvent buf[THREAD_BUF_SZ];
+
+		// write index: number of events produced so far (monotonic)
+		std::atomic<uint32_t> writeIndex{ 0 };
+
+		// consumer uses this to remember where it consumed up to
+		uint32_t lastConsumed = 0;
+
+		// convenience
+		void reset() { writeIndex.store(0, std::memory_order_relaxed); lastConsumed = 0; }
+	};
+
+	// global registration array (fixed size, lock-free CAS insertion)
+	static std::atomic<ThreadLog*> g_threadLogs[MAX_THREAD_LOGS] = {};
+
+	// helper to find/claim a slot for this thread
+	static ThreadLog* RegisterCurrentThreadLog(ThreadLog* local)
 	{
-		// backup original bytes
-		memcpy(g_origBytes, (void*)TARGET, g_patchSize);
+		// if already in table (someone else registered same pointer) return
+		for (size_t i = 0; i < MAX_THREAD_LOGS; ++i) {
+			ThreadLog* t = g_threadLogs[i].load(std::memory_order_acquire);
+			if (t == local) return t;
+		}
 
-		// allocate RWX memory for trampoline
-		const size_t trampSize = g_patchSize + 5; // copied bytes + jmp rel32 back
-		g_trampoline = (uint8_t*)VirtualAlloc(nullptr, trampSize, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
-		if (!g_trampoline) return false;
+		// try to insert into an empty slot
+		for (size_t i = 0; i < MAX_THREAD_LOGS; ++i) {
+			ThreadLog* expected = nullptr;
+			if (g_threadLogs[i].compare_exchange_strong(expected, local,
+				std::memory_order_acq_rel, std::memory_order_acquire)) {
+				return local;
+			}
+		}
 
-		// copy the original bytes
-		memcpy(g_trampoline, (void*)TARGET, g_patchSize);
+		// no slot available: return nullptr => logging disabled for this thread
+		return nullptr;
+	}
 
-		// append jmp back to original code at TARGET + g_patchSize
-		uintptr_t origContinue = (uintptr_t)TARGET + g_patchSize;
-		uintptr_t jmpFrom = (uintptr_t)(g_trampoline + g_patchSize);
-		int32_t relBack = static_cast<int32_t>(origContinue - (jmpFrom + 5));
+	// thread_local buffer (no heap)
+	thread_local ThreadLog g_localThreadLog;
 
-		g_trampoline[g_patchSize + 0] = 0xE9; // JMP rel32
-		*reinterpret_cast<int32_t*>(g_trampoline + g_patchSize + 1) = relBack;
+	// get current thread log pointer (register on first use)
+	static inline ThreadLog* GetThreadLog()
+	{
+		static thread_local bool registered = false;
+		if (!registered) {
+			ThreadLog* result = RegisterCurrentThreadLog(&g_localThreadLog);
+			registered = true; // even if result==nullptr we won't retry (avoid allocations)
+			(void)result;
+		}
+		// we return pointer even if not in global registry — draining iterates only registered ones
+		return &g_localThreadLog;
+	}
 
-		// set callable pointer
-		g_originalAlloc = reinterpret_cast<FormHeapAllocate_t>(g_trampoline);
+	// ---------- Safe record functions (callable inside hooks) ----------
+
+	inline void RecordAlloc(uint32_t caller, uint32_t size, void* ptr) noexcept
+	{
+		ThreadLog* tlog = GetThreadLog();
+		if (!tlog) return;
+
+		// producer writes event into buffer, then increments writeIndex (release)
+		uint32_t idx = tlog->writeIndex.load(std::memory_order_relaxed);
+		uint32_t slot = idx % THREAD_BUF_SZ;
+
+		// write payload (plain stores)
+		tlog->buf[slot].ptr = ptr;
+		tlog->buf[slot].size = size;
+		tlog->buf[slot].caller = caller;
+		tlog->buf[slot].kind = 0; // alloc
+
+		// publish the event (release ensures prior writes visible to consumer)
+		tlog->writeIndex.store(idx + 1, std::memory_order_release);
+	}
+
+	inline void RecordFree(uint32_t caller, void* ptr) noexcept
+	{
+		ThreadLog* tlog = GetThreadLog();
+		if (!tlog) return;
+
+		uint32_t idx = tlog->writeIndex.load(std::memory_order_relaxed);
+		uint32_t slot = idx % THREAD_BUF_SZ;
+
+		tlog->buf[slot].ptr = ptr;
+		tlog->buf[slot].size = 0;
+		tlog->buf[slot].caller = caller;
+		tlog->buf[slot].kind = 1; // free
+
+		tlog->writeIndex.store(idx + 1, std::memory_order_release);
+	}
+
+	// returns pointer to trampoline (callable), or nullptr on failure
+	void* CreateTrampoline(uintptr_t target, size_t patchSize)
+	{
+		if (patchSize < 5) return nullptr;
+		size_t trampSize = patchSize + 5;
+		uint8_t* trampoline = static_cast<uint8_t*>(
+			VirtualAlloc(nullptr, trampSize, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE)
+			);
+		if (!trampoline) return nullptr;
+
+		// copy original bytes
+		memcpy(trampoline, reinterpret_cast<void*>(target), patchSize);
+
+		// jmp back to original function after overwritten bytes
+		uintptr_t retAddr = target + patchSize;
+		uintptr_t jmpFrom = reinterpret_cast<uintptr_t>(trampoline + patchSize);
+		int32_t relBack = static_cast<int32_t>(retAddr - (jmpFrom + 5));
+		trampoline[patchSize] = 0xE9;
+		*reinterpret_cast<int32_t*>(trampoline + patchSize + 1) = relBack;
+
+		return trampoline;
+	}
+
+	bool PatchJump(uintptr_t target, void* hookFunc)
+	{
+		DWORD old;
+		if (!VirtualProtect(reinterpret_cast<void*>(target), 5, PAGE_EXECUTE_READWRITE, &old)) return false;
+		uintptr_t hookAddr = reinterpret_cast<uintptr_t>(hookFunc);
+		int32_t rel = static_cast<int32_t>(hookAddr - (target + 5));
+		uint8_t jmp = 0xE9;
+		memcpy(reinterpret_cast<void*>(target), &jmp, 1);
+		memcpy(reinterpret_cast<void*>(target + 1), &rel, 4);
+		VirtualProtect(reinterpret_cast<void*>(target), 5, old, &old);
 		return true;
 	}
 
-	void* __cdecl new_FormHeapAllocate(size_t allocSize)
+	void* __cdecl Hooked_FormHeapAlloc(size_t size)
 	{
-		// Get caller return address
-		void* returnAddr = _ReturnAddress();
-
-		UInt32 caller = reinterpret_cast<UInt32>(returnAddr);
-
-		// Log safely (no heap alloc)
-		//LogCallerAddr(caller, allocSize);
-		
-		allocMap[caller]++;
-
-		// Call original via trampoline
-		if (g_originalAlloc) {
-			return g_originalAlloc(allocSize);
+		uint32_t caller = reinterpret_cast<uint32_t>(_ReturnAddress());
+		void* result = nullptr;
+		if (g_origAlloc) result = g_origAlloc(size);
+		else {
+			using RawAlloc_t = void* (__cdecl*)(size_t);
+			RawAlloc_t raw = reinterpret_cast<RawAlloc_t>(0x00401F00); // fallback only
+			result = raw(size);
 		}
-
-		// Fallback if trampoline failed (risky)
-		typedef void* (__cdecl* RawAlloc_t)(size_t);
-		RawAlloc_t raw = reinterpret_cast<RawAlloc_t>(TARGET);
-		return raw(allocSize);
+		if (result) RecordAlloc(caller, static_cast<uint32_t>(size), result);
+		return result;
 	}
 
-	// Install hook: write JMP at target -> new_FormHeapAllocate
+	void __cdecl Hooked_FormHeapFree(void* ptr)
+	{
+		uint32_t caller = reinterpret_cast<uint32_t>(_ReturnAddress());
+		// record free first or after; recording after is fine
+		RecordFree(caller, ptr);
+		if (g_origFree) g_origFree(ptr);
+		else {
+			using RawFree_t = void(__cdecl*)(void*);
+			RawFree_t raw = reinterpret_cast<RawFree_t>(0x00401F20);
+			raw(ptr);
+		}
+	}
+
+	void DrainThreadLogs()
+	{
+		// iterate registered slots
+		for (size_t i = 0; i < MAX_THREAD_LOGS; ++i) {
+			ThreadLog* t = g_threadLogs[i].load(std::memory_order_acquire);
+			if (!t) continue;
+
+			// read producer index (number of events produced)
+			uint32_t produced = t->writeIndex.load(std::memory_order_acquire);
+			uint32_t start = t->lastConsumed;
+			// process events start .. produced-1
+			for (uint32_t idx = start; idx < produced; ++idx) {
+				uint32_t slot = idx % THREAD_BUF_SZ;
+				const AllocEvent& ev = t->buf[slot];
+
+				// apply event
+				if (ev.kind == 0) {
+					std::scoped_lock lock(g_allocMutex);
+					g_activeAllocs[ev.ptr] = { ev.caller, ev.size };
+					g_totalActiveBytes.fetch_add(ev.size, std::memory_order_relaxed);
+				}
+				else {
+					std::scoped_lock lock(g_allocMutex);
+					auto it = g_activeAllocs.find(ev.ptr);
+					if (it != g_activeAllocs.end()) {
+						g_totalActiveBytes.fetch_sub(it->second.size, std::memory_order_relaxed);
+						g_activeAllocs.erase(it);
+					}
+				}
+			}
+			// mark consumed
+			t->lastConsumed = produced;
+		}
+	}
+
+	void StartDrainThread()
+	{
+		static std::atomic<bool> running{ true };
+		std::thread([] {
+			SetThreadDescription(GetCurrentThread(), L"AllocDrainThread");
+			while (true) {
+				std::this_thread::sleep_for(std::chrono::milliseconds(200));
+				DrainThreadLogs();
+			}
+			}).detach();
+	}
+
 	bool InstallAllocHook()
 	{
-		if (!CreateTrampoline()) return false;
-
-		uintptr_t hookAddr = reinterpret_cast<uintptr_t>(&new_FormHeapAllocate);
-		int32_t relToHook = static_cast<int32_t>(hookAddr - (TARGET + 5));
-
-		// write opcode 0xE9 then rel32 using SafeWrite
-		SafeWrite8(TARGET, 0xE9);
-		SafeWrite32(TARGET + 1, static_cast<UInt32>(relToHook));
-
-		return true;
+		g_allocTramp = CreateTrampoline(TARGET_ALLOC, PATCH_SIZE);
+		if (!g_allocTramp) return false;
+		g_origAlloc = reinterpret_cast<Alloc_t>(g_allocTramp);
+		return PatchJump(TARGET_ALLOC, &Hooked_FormHeapAlloc);
 	}
 
-	// Remove hook: restore original bytes and free trampoline
-	void RemoveHook()
+	bool InstallFreeHook()
 	{
-		// restore original bytes (use VirtualProtect-aware write)
-		DWORD old;
-		VirtualProtect((LPVOID)TARGET, g_patchSize, PAGE_EXECUTE_READWRITE, &old);
-		memcpy((void*)TARGET, g_origBytes, g_patchSize);
-		FlushInstructionCache(GetCurrentProcess(), (void*)TARGET, g_patchSize);
-		VirtualProtect((LPVOID)TARGET, g_patchSize, old, &old);
+		g_freeTramp = CreateTrampoline(TARGET_FREE, PATCH_SIZE);
+		if (!g_freeTramp) return false;
+		g_origFree = reinterpret_cast<Free_t>(g_freeTramp);
+		return PatchJump(TARGET_FREE, &Hooked_FormHeapFree);
+		StartDrainThread();
+	}
 
-		if (g_trampoline) {
-			VirtualFree(g_trampoline, 0, MEM_RELEASE);
-			g_trampoline = nullptr;
-			g_originalAlloc = nullptr;
+	void DumpAllocStats(HANDLE hProcess)
+	{
+		DrainThreadLogs();
+		std::this_thread::sleep_for(std::chrono::milliseconds(50));
+		DrainThreadLogs();
+
+		char workingDirectory[MAX_PATH];
+		char symbolPath[MAX_PATH];
+		char altSymbolPath[MAX_PATH];
+		GetCurrentDirectory(MAX_PATH, workingDirectory);
+		GetEnvironmentVariable("_NT_SYMBOL_PATH", symbolPath, MAX_PATH);
+		GetEnvironmentVariable("_NT_ALTERNATE_SYMBOL_PATH", altSymbolPath, MAX_PATH);
+		std::string lookPath = std::format("{};{}\\Data\\OBSE\\plugins;{};{}", workingDirectory, workingDirectory, symbolPath, altSymbolPath);
+
+		char newSymbolPath[MAX_PATH] = {};
+		if (!SymGetSearchPath(hProcess, newSymbolPath, MAX_PATH)) {
+			SymCleanup(hProcess);
+			SymInitialize(hProcess, lookPath.c_str(), TRUE);
 		}
+
+		std::unordered_map<uint32_t, uint64_t> callerBytes;
+		std::unordered_map<uint32_t, uint32_t> callerCounts;
+
+		{
+			std::scoped_lock lock(g_allocMutex);
+			for (auto& [ptr, info] : g_activeAllocs) {
+				callerBytes[info.caller] += info.size;
+				callerCounts[info.caller] += 1;
+			}
+		}
+
+		// Move into sortable vector
+		struct CallerStat {
+			uint32_t caller;
+			uint64_t bytes;
+			uint32_t count;
+		};
+
+		std::vector<CallerStat> stats;
+		stats.reserve(callerBytes.size());
+		for (auto& [caller, bytes] : callerBytes)
+			stats.push_back({ caller, bytes, callerCounts[caller] });
+
+		// Sort descending by total bytes
+		std::sort(stats.begin(), stats.end(),
+			[](const CallerStat& a, const CallerStat& b) {
+				return a.bytes > b.bytes;
+			});
+
+		std::ofstream out("AllocDump.txt");
+		out << "===== Active Allocations by Caller =====\n";
+		out << std::format("{:<50} {:>12} {:>12}\n", "Function", "Count", "Bytes");
+		out << "--------------------------------------------------------------\n";
+
+		for (auto& stat : stats) {
+			std::string sym = PDB::GetSymbol(stat.caller, hProcess);
+			out << std::format("{:<50} {:>12} {:>12}\n", sym, stat.count, stat.bytes);
+		}
+
+		out << "--------------------------------------------------------------\n";
+		out << std::format("Total Active Allocations: {:>12} bytes ({:.2f} MB)\n",
+			g_totalActiveBytes.load(),
+			g_totalActiveBytes.load() / (1024.0 * 1024.0));
+
+		out.close();
+
+		_MESSAGE("Memory dump complete: %zu entries, total active %.2f MB",
+			stats.size(),
+			g_totalActiveBytes.load() / (1024.0 * 1024.0));
+
+		out.close();
 	}
 
 	void DumpAllocationsToFile(const std::map<UInt32, UInt32>& allocMap, HANDLE hProcess)
@@ -232,7 +467,7 @@ namespace CrashLogger::Memory
 			output << std::format("Total Memory:      {}", GetMemoryUsageString(usedHeapMemory + uiPoolMemory, totalHeapMemory + uiTotalPoolMemory)) << '\n';
 
 			
-			DumpAllocationsToFile(allocMap, hProcess);
+			DumpAllocStats(hProcess);
 		}
 	}
 	catch (...) { output << "Failed to log memory." << '\n'; }
