@@ -4,6 +4,7 @@
 #include "CrashLogger.hpp"
 #include "Logging.hpp"
 #include <iostream>
+#include "SharedMem.h"
 
 IDebugLog    gLog("CrashLogger.log");
 PluginHandle g_pluginHandle = kPluginHandle_Invalid;
@@ -72,17 +73,27 @@ extern "C" {
          // no version checks needed for editor
       }
       // version checks pass
+
+      if (!GetModuleHandleExA(
+          GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+          reinterpret_cast<LPCSTR>(info->name),
+          &g_hThisDLL
+      ))
+      {
+          _MESSAGE("Failed to get module handle: %d", GetLastError());
+      }
       return true;
    }
 
    bool OBSEPlugin_Load(const OBSEInterface* obse) {
       g_pluginHandle = obse->GetPluginHandle();
-      
+
       if (!obse->isEditor){
+          
           InitLog(GetCurPath());
           Inits();
+          
       }
-          //CobbPatches::CrashLog::Apply(false);
       return true;
    }
 };

@@ -71,6 +71,8 @@
     <ClCompile Include="..\OBSE\obse\obse_common\SafeWrite.cpp">
       <Filter>obse</Filter>
     </ClCompile>
+    <ClCompile Include="PDB.cpp" />
+    <ClCompile Include="SharedMem.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="CrashLogger.hpp" />
@@ -140,6 +142,8 @@
     <ClInclude Include="..\OBSE\obse\obse_common\SafeWrite.h">
       <Filter>obse</Filter>
     </ClInclude>
+    <ClInclude Include="PDB.h" />
+    <ClInclude Include="SharedMem.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="exports.def" />

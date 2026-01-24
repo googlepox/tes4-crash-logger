@@ -16,10 +16,14 @@ namespace CrashLogger::Registry { inline void Process(EXCEPTION_POINTERS* info);
 namespace CrashLogger::Stack { inline void Process(EXCEPTION_POINTERS* info); inline std::stringstream& Get(); }
 namespace CrashLogger::Modules { inline void Process(EXCEPTION_POINTERS* info); inline std::stringstream& Get(); }
 namespace CrashLogger::Install { inline void Process(EXCEPTION_POINTERS* info); inline std::stringstream& Get(); }
-namespace CrashLogger::Memory { inline void Process(EXCEPTION_POINTERS* info); inline std::stringstream& Get(); bool InstallAllocHook(); bool InstallFreeHook();}
+namespace CrashLogger::Memory
+{
+	inline void Process(EXCEPTION_POINTERS* info); inline std::stringstream& Get();
+	bool InstallAllocHook(); bool InstallFreeHook();  void StartMemoryProfiler(); void LaunchHelper();
+}
 //namespace CrashLogger::Mods { inline void Process(EXCEPTION_POINTERS* info); inline std::stringstream& Get(); }
 namespace CrashLogger::Device { inline void Process(EXCEPTION_POINTERS* info); inline std::stringstream& Get(); }
-//namespace CrashLogger::AssetTracker { inline void Process(EXCEPTION_POINTERS* info); inline std::stringstream& Get(); }
+namespace CrashLogger::GameData { inline void __fastcall Process(EXCEPTION_POINTERS* info); inline std::stringstream& Get(); }
 
 namespace CrashLogger::Stack
 {
@@ -37,6 +41,7 @@ namespace CrashLogger::PDB
 
 namespace CrashLogger
 {
+
 	class SE_Exception
 	{
 	public:

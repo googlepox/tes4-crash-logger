@@ -3,6 +3,9 @@
 #include "GameAPI.h"
 #include "PluginManager.h"
 #include <SafeWrite.h>
+#include <Script.h>
+#include "PDB.h"
+#include "SharedMem.h"
 
 #define PRINT_HEAPS 1
 #define PRINT_POOLS 0
@@ -28,94 +31,98 @@ namespace CrashLogger::Memory
 	static std::unordered_map<void*, AllocInfo> g_activeAllocs;
 	static std::mutex g_allocMutex;
 
-	constexpr size_t THREAD_BUF_SZ = 1 << 18;   // 4096 entries per thread (tune)
+	constexpr size_t THREAD_BUF_SZ = 1 << 18;
 	constexpr size_t MAX_THREAD_LOGS = 64;
 
 	std::atomic<uint64_t> g_totalActiveBytes{ 0 };
+	static std::atomic<uint64_t> g_overflowCount{ 0 };
 
-	// ---------- event struct ----------
-	struct AllocEvent {
-		void* ptr;
-		uint32_t size;
-		uint32_t caller;   // RVA/VA as uint32
-		uint8_t  kind;     // 0 = alloc, 1 = free
-		uint8_t  pad[3];
-	};
+	static std::atomic<bool> g_profilingEnabled{ false };
+	static std::atomic<bool> g_profilingStarted{ false };
 
-	// ---------- per-thread buffer ----------
-	struct ThreadLog {
-		// circular/append-only buffer (single-producer: the thread)
+	std::thread g_memoryProfilerThread;
+
+
+	struct ThreadLog
+	{
 		AllocEvent buf[THREAD_BUF_SZ];
-
-		// write index: number of events produced so far (monotonic)
 		std::atomic<uint32_t> writeIndex{ 0 };
-
-		// consumer uses this to remember where it consumed up to
 		uint32_t lastConsumed = 0;
 
-		// convenience
-		void reset() { writeIndex.store(0, std::memory_order_relaxed); lastConsumed = 0; }
+		void reset()
+		{
+			writeIndex.store(0, std::memory_order_relaxed);
+			lastConsumed = 0;
+		}
 	};
 
-	// global registration array (fixed size, lock-free CAS insertion)
+	// Global registration array (fixed size, lock-free CAS insertion)
 	static std::atomic<ThreadLog*> g_threadLogs[MAX_THREAD_LOGS] = {};
 
-	// helper to find/claim a slot for this thread
+	// Helper to find/claim a slot for this thread
 	static ThreadLog* RegisterCurrentThreadLog(ThreadLog* local)
 	{
-		// if already in table (someone else registered same pointer) return
-		for (size_t i = 0; i < MAX_THREAD_LOGS; ++i) {
+		// Check if already registered
+		for (size_t i = 0; i < MAX_THREAD_LOGS; ++i)
+		{
 			ThreadLog* t = g_threadLogs[i].load(std::memory_order_acquire);
 			if (t == local) return t;
 		}
 
-		// try to insert into an empty slot
-		for (size_t i = 0; i < MAX_THREAD_LOGS; ++i) {
+		// Try to insert into an empty slot
+		for (size_t i = 0; i < MAX_THREAD_LOGS; ++i)
+		{
 			ThreadLog* expected = nullptr;
 			if (g_threadLogs[i].compare_exchange_strong(expected, local,
-				std::memory_order_acq_rel, std::memory_order_acquire)) {
+				std::memory_order_acq_rel, std::memory_order_acquire))
+			{
 				return local;
 			}
 		}
 
-		// no slot available: return nullptr => logging disabled for this thread
+		// No slot available
 		return nullptr;
 	}
 
-	// thread_local buffer (no heap)
 	thread_local ThreadLog g_localThreadLog;
 
-	// get current thread log pointer (register on first use)
 	static inline ThreadLog* GetThreadLog()
 	{
 		static thread_local bool registered = false;
-		if (!registered) {
-			ThreadLog* result = RegisterCurrentThreadLog(&g_localThreadLog);
-			registered = true; // even if result==nullptr we won't retry (avoid allocations)
-			(void)result;
+		static thread_local bool disabled = false;
+
+		if (disabled)
+			return nullptr;
+
+		if (!registered)
+		{
+			if (!RegisterCurrentThreadLog(&g_localThreadLog))
+			{
+				// No slot available – stop recording on this thread
+				g_overflowCount.fetch_add(1, std::memory_order_relaxed);
+				disabled = true;
+				return nullptr;
+			}
+
+			registered = true;
 		}
-		// we return pointer even if not in global registry — draining iterates only registered ones
+
 		return &g_localThreadLog;
 	}
-
-	// ---------- Safe record functions (callable inside hooks) ----------
 
 	inline void RecordAlloc(uint32_t caller, uint32_t size, void* ptr) noexcept
 	{
 		ThreadLog* tlog = GetThreadLog();
 		if (!tlog) return;
 
-		// producer writes event into buffer, then increments writeIndex (release)
 		uint32_t idx = tlog->writeIndex.load(std::memory_order_relaxed);
 		uint32_t slot = idx % THREAD_BUF_SZ;
 
-		// write payload (plain stores)
 		tlog->buf[slot].ptr = ptr;
 		tlog->buf[slot].size = size;
 		tlog->buf[slot].caller = caller;
-		tlog->buf[slot].kind = 0; // alloc
+		tlog->buf[slot].type = 0; // alloc
 
-		// publish the event (release ensures prior writes visible to consumer)
 		tlog->writeIndex.store(idx + 1, std::memory_order_release);
 	}
 
@@ -130,12 +137,12 @@ namespace CrashLogger::Memory
 		tlog->buf[slot].ptr = ptr;
 		tlog->buf[slot].size = 0;
 		tlog->buf[slot].caller = caller;
-		tlog->buf[slot].kind = 1; // free
+		tlog->buf[slot].type = 1; // free
 
 		tlog->writeIndex.store(idx + 1, std::memory_order_release);
 	}
 
-	// returns pointer to trampoline (callable), or nullptr on failure
+	// Trampoline creation
 	void* CreateTrampoline(uintptr_t target, size_t patchSize)
 	{
 		if (patchSize < 5) return nullptr;
@@ -145,10 +152,8 @@ namespace CrashLogger::Memory
 			);
 		if (!trampoline) return nullptr;
 
-		// copy original bytes
 		memcpy(trampoline, reinterpret_cast<void*>(target), patchSize);
 
-		// jmp back to original function after overwritten bytes
 		uintptr_t retAddr = target + patchSize;
 		uintptr_t jmpFrom = reinterpret_cast<uintptr_t>(trampoline + patchSize);
 		int32_t relBack = static_cast<int32_t>(retAddr - (jmpFrom + 5));
@@ -158,91 +163,87 @@ namespace CrashLogger::Memory
 		return trampoline;
 	}
 
-	bool PatchJump(uintptr_t target, void* hookFunc)
+	bool PatchJump(uintptr_t target, size_t patchSize, void* hookFunc)
 	{
 		DWORD old;
-		if (!VirtualProtect(reinterpret_cast<void*>(target), 5, PAGE_EXECUTE_READWRITE, &old)) return false;
+		if (!VirtualProtect(reinterpret_cast<void*>(target), 5, PAGE_EXECUTE_READWRITE, &old))
+			return false;
+
 		uintptr_t hookAddr = reinterpret_cast<uintptr_t>(hookFunc);
 		int32_t rel = static_cast<int32_t>(hookAddr - (target + 5));
 		uint8_t jmp = 0xE9;
 		memcpy(reinterpret_cast<void*>(target), &jmp, 1);
 		memcpy(reinterpret_cast<void*>(target + 1), &rel, 4);
-		VirtualProtect(reinterpret_cast<void*>(target), 5, old, &old);
+		VirtualProtect(reinterpret_cast<void*>(target), patchSize, old, &old);
 		return true;
 	}
 
+	// Hook functions
 	void* __cdecl Hooked_FormHeapAlloc(size_t size)
 	{
-		uint32_t caller = reinterpret_cast<uint32_t>(_ReturnAddress());
-		void* result = nullptr;
-		if (g_origAlloc) result = g_origAlloc(size);
-		else {
-			using RawAlloc_t = void* (__cdecl*)(size_t);
-			RawAlloc_t raw = reinterpret_cast<RawAlloc_t>(0x00401F00); // fallback only
-			result = raw(size);
+		if (g_shm)
+		{
+			g_shm->header.debugCounter.fetch_add(1, std::memory_order_relaxed);
+			g_shm->header.lastHeartbeat.store(GetTickCount64(), std::memory_order_relaxed);
 		}
-		if (result) RecordAlloc(caller, static_cast<uint32_t>(size), result);
+
+		uint32_t caller = reinterpret_cast<uint32_t>(_ReturnAddress());
+		void* result = g_origAlloc(size);
+
+		if (!result) return nullptr;
+
+		// Record allocation event if profiling is active
+		if (g_profilingEnabled.load(std::memory_order_acquire))
+		{
+			RecordAlloc(caller, static_cast<uint32_t>(size), result);
+		}
+
 		return result;
 	}
 
 	void __cdecl Hooked_FormHeapFree(void* ptr)
 	{
-		uint32_t caller = reinterpret_cast<uint32_t>(_ReturnAddress());
-		// record free first or after; recording after is fine
-		RecordFree(caller, ptr);
-		if (g_origFree) g_origFree(ptr);
-		else {
-			using RawFree_t = void(__cdecl*)(void*);
-			RawFree_t raw = reinterpret_cast<RawFree_t>(0x00401F20);
-			raw(ptr);
+		if (!ptr)
+		{
+			g_origFree(ptr);
+			return;
 		}
+
+		uint32_t caller = reinterpret_cast<uint32_t>(_ReturnAddress());
+
+		if (g_profilingEnabled.load(std::memory_order_acquire))
+		{
+			RecordFree(caller, ptr);
+		}
+
+		g_origFree(ptr);
 	}
 
-	void DrainThreadLogs()
+	void FlushThreadLogsToSharedMemory()
 	{
-		// iterate registered slots
-		for (size_t i = 0; i < MAX_THREAD_LOGS; ++i) {
+		for (size_t i = 0; i < MAX_THREAD_LOGS; ++i)
+		{
 			ThreadLog* t = g_threadLogs[i].load(std::memory_order_acquire);
 			if (!t) continue;
 
-			// read producer index (number of events produced)
 			uint32_t produced = t->writeIndex.load(std::memory_order_acquire);
 			uint32_t start = t->lastConsumed;
-			// process events start .. produced-1
-			for (uint32_t idx = start; idx < produced; ++idx) {
-				uint32_t slot = idx % THREAD_BUF_SZ;
-				const AllocEvent& ev = t->buf[slot];
 
-				// apply event
-				if (ev.kind == 0) {
-					std::scoped_lock lock(g_allocMutex);
-					g_activeAllocs[ev.ptr] = { ev.caller, ev.size };
-					g_totalActiveBytes.fetch_add(ev.size, std::memory_order_relaxed);
-				}
-				else {
-					std::scoped_lock lock(g_allocMutex);
-					auto it = g_activeAllocs.find(ev.ptr);
-					if (it != g_activeAllocs.end()) {
-						g_totalActiveBytes.fetch_sub(it->second.size, std::memory_order_relaxed);
-						g_activeAllocs.erase(it);
-					}
-				}
+			// Handle overwrite / overflow
+			if (produced - start > THREAD_BUF_SZ)
+			{
+				g_overflowCount.fetch_add(produced - start - THREAD_BUF_SZ,
+					std::memory_order_relaxed);
+				start = produced - THREAD_BUF_SZ;
 			}
-			// mark consumed
+
+			for (uint32_t idx = start; idx < produced; ++idx)
+			{
+				TryWriteShared(t->buf[idx % THREAD_BUF_SZ]);
+			}
+
 			t->lastConsumed = produced;
 		}
-	}
-
-	void StartDrainThread()
-	{
-		static std::atomic<bool> running{ true };
-		std::thread([] {
-			SetThreadDescription(GetCurrentThread(), L"AllocDrainThread");
-			while (true) {
-				std::this_thread::sleep_for(std::chrono::milliseconds(200));
-				DrainThreadLogs();
-			}
-			}).detach();
 	}
 
 	bool InstallAllocHook()
@@ -250,7 +251,7 @@ namespace CrashLogger::Memory
 		g_allocTramp = CreateTrampoline(TARGET_ALLOC, PATCH_SIZE);
 		if (!g_allocTramp) return false;
 		g_origAlloc = reinterpret_cast<Alloc_t>(g_allocTramp);
-		return PatchJump(TARGET_ALLOC, &Hooked_FormHeapAlloc);
+		return PatchJump(TARGET_ALLOC, PATCH_SIZE, &Hooked_FormHeapAlloc);
 	}
 
 	bool InstallFreeHook()
@@ -258,137 +259,209 @@ namespace CrashLogger::Memory
 		g_freeTramp = CreateTrampoline(TARGET_FREE, PATCH_SIZE);
 		if (!g_freeTramp) return false;
 		g_origFree = reinterpret_cast<Free_t>(g_freeTramp);
-		return PatchJump(TARGET_FREE, &Hooked_FormHeapFree);
-		StartDrainThread();
+		return PatchJump(TARGET_FREE, PATCH_SIZE, &Hooked_FormHeapFree);
 	}
 
-	void DumpAllocStats(HANDLE hProcess)
+	// Helper to determine appropriate depth based on caller
+	UInt32 GetDepthForCaller(const std::string& callerSymbol)
 	{
-		DrainThreadLogs();
-		std::this_thread::sleep_for(std::chrono::milliseconds(50));
-		DrainThreadLogs();
-
-		char workingDirectory[MAX_PATH];
-		char symbolPath[MAX_PATH];
-		char altSymbolPath[MAX_PATH];
-		GetCurrentDirectory(MAX_PATH, workingDirectory);
-		GetEnvironmentVariable("_NT_SYMBOL_PATH", symbolPath, MAX_PATH);
-		GetEnvironmentVariable("_NT_ALTERNATE_SYMBOL_PATH", altSymbolPath, MAX_PATH);
-		std::string lookPath = std::format("{};{}\\Data\\OBSE\\plugins;{};{}", workingDirectory, workingDirectory, symbolPath, altSymbolPath);
-
-		char newSymbolPath[MAX_PATH] = {};
-		if (!SymGetSearchPath(hProcess, newSymbolPath, MAX_PATH)) {
-			SymCleanup(hProcess);
-			SymInitialize(hProcess, lookPath.c_str(), TRUE);
+		// Buffer/array allocations - no vtable
+		if (callerSymbol.find("Buffer") != std::string::npos ||
+			callerSymbol.find("Array") != std::string::npos ||
+			callerSymbol.find("Insert") != std::string::npos)
+		{
+			return 0;  // Skip resolution, these are raw buffers
 		}
 
-		std::unordered_map<uint32_t, uint64_t> callerBytes;
-		std::unordered_map<uint32_t, uint32_t> callerCounts;
-
+		// NiGeometryData_ReadBinary allocates vertex/normal/UV buffers (raw floats/vectors)
+		if (callerSymbol.find("NiGeometryData_ReadBinary") != std::string::npos)
 		{
-			std::scoped_lock lock(g_allocMutex);
-			for (auto& [ptr, info] : g_activeAllocs) {
-				callerBytes[info.caller] += info.size;
-				callerCounts[info.caller] += 1;
+			return 0;  // Raw geometry data, no vtable
+		}
+
+		// Direct object allocations - vtable is at offset 0
+		if (callerSymbol.find("new") != std::string::npos ||
+			callerSymbol.find("CreateCopy") != std::string::npos ||
+			callerSymbol.find("ReadBinary") != std::string::npos)
+		{
+			return 1;  // Allocated object has vtable at ptr[0]
+		}
+
+		// ExtraData allocations - usually pointer to object
+		if (callerSymbol.find("Extra") != std::string::npos)
+		{
+			return 2;
+		}
+
+		// Default: try shallow first
+		return 2;
+	}
+
+	// Safe wrapper that won't crash on invalid pointers
+	std::string SafeGetLineForObject(void* ptr, UInt32 depth)
+	{
+		if (!ptr) return "<null>";
+
+		// Check if memory is readable before dereferencing
+		MEMORY_BASIC_INFORMATION mbi;
+		if (VirtualQuery(ptr, &mbi, sizeof(mbi)) == 0)
+		{
+			return "<invalid memory>";
+		}
+
+		if (!(mbi.State & MEM_COMMIT) ||
+			!(mbi.Protect & (PAGE_READONLY | PAGE_READWRITE | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE)))
+		{
+			return "<inaccessible memory>";
+		}
+
+		void* ptrCopy = ptr;  // Make non-const copy
+		void** objectPtr = &ptrCopy;
+		std::string result = Stack::GetLineForObject(objectPtr, depth);
+		return result.empty() ? "<unresolved>" : result;
+	};
+
+	// Get module name from address (faster and more reliable than full symbol resolution)
+	std::string GetModuleFromAddress(uint32_t address, HANDLE hProcess)
+	{
+		HMODULE hMods[1024];
+		DWORD cbNeeded;
+
+		if (EnumProcessModules(hProcess, hMods, sizeof(hMods), &cbNeeded))
+		{
+			for (unsigned int i = 0; i < (cbNeeded / sizeof(HMODULE)); i++)
+			{
+				MODULEINFO modInfo;
+				if (GetModuleInformation(hProcess, hMods[i], &modInfo, sizeof(modInfo)))
+				{
+					uintptr_t base = reinterpret_cast<uintptr_t>(modInfo.lpBaseOfDll);
+					uintptr_t end = base + modInfo.SizeOfImage;
+
+					if (address >= base && address < end)
+					{
+						char modName[MAX_PATH];
+						if (GetModuleBaseName(hProcess, hMods[i], modName, sizeof(modName)))
+						{
+							return std::format("{}+0x{:X}", modName, address - base);
+						}
+					}
+				}
+			}
+		}
+		return std::format("0x{:08X}", address);
+	}
+
+	// Safe symbol resolution - try module name first, fall back to PDB if needed
+	std::string SafeGetSymbol(uint32_t addr, HANDLE hProcess, bool tryFullSymbols)
+	{
+		// Always get module info (fast and reliable)
+		std::string moduleInfo = GetModuleFromAddress(addr, hProcess);
+
+		// Only try full symbol resolution if explicitly requested and enabled
+		if (tryFullSymbols)
+		{
+			std::string sym = PDB::GetSymbol(addr, hProcess);
+			if (!sym.empty())
+			{
+				return sym;
 			}
 		}
 
-		// Move into sortable vector
-		struct CallerStat {
-			uint32_t caller;
-			uint64_t bytes;
-			uint32_t count;
-		};
-
-		std::vector<CallerStat> stats;
-		stats.reserve(callerBytes.size());
-		for (auto& [caller, bytes] : callerBytes)
-			stats.push_back({ caller, bytes, callerCounts[caller] });
-
-		// Sort descending by total bytes
-		std::sort(stats.begin(), stats.end(),
-			[](const CallerStat& a, const CallerStat& b) {
-				return a.bytes > b.bytes;
-			});
-
-		std::ofstream out("AllocDump.txt");
-		out << "===== Active Allocations by Caller =====\n";
-		out << std::format("{:<50} {:>12} {:>12}\n", "Function", "Count", "Bytes");
-		out << "--------------------------------------------------------------\n";
-
-		for (auto& stat : stats) {
-			std::string sym = PDB::GetSymbol(stat.caller, hProcess);
-			out << std::format("{:<50} {:>12} {:>12}\n", sym, stat.count, stat.bytes);
-		}
-
-		out << "--------------------------------------------------------------\n";
-		out << std::format("Total Active Allocations: {:>12} bytes ({:.2f} MB)\n",
-			g_totalActiveBytes.load(),
-			g_totalActiveBytes.load() / (1024.0 * 1024.0));
-
-		out.close();
-
-		_MESSAGE("Memory dump complete: %zu entries, total active %.2f MB",
-			stats.size(),
-			g_totalActiveBytes.load() / (1024.0 * 1024.0));
-
-		out.close();
+		return moduleInfo;
 	}
 
-	void DumpAllocationsToFile(const std::map<UInt32, UInt32>& allocMap, HANDLE hProcess)
+	void TickMemoryProfiler()
 	{
-		_MESSAGE("Dumping Allocations to file");
-		// Copy entries into a sortable vector
-		std::vector<std::pair<UInt32, UInt32>> sortedEntries(allocMap.begin(), allocMap.end());
+		if (!g_profilingEnabled.load(std::memory_order_acquire))
+			return;
 
-		// Sort descending by count
-		std::sort(sortedEntries.begin(), sortedEntries.end(),
-			[](const auto& a, const auto& b) {
-				return a.second > b.second;
-			});
+		static uint32_t counter = 0;
+		if ((++counter & 0x3F) == 0) // every ~64 calls
+		{
+			FlushThreadLogsToSharedMemory();
+		}
+	}
 
-		// Open file
-		std::ofstream output("AllocDump.txt", std::ios::out | std::ios::trunc);
-		if (!output.is_open()) {
-			_MESSAGE("Failed to open AllocDump.txt for writing.");
+	void MemoryProfilerThread()
+	{
+		while (g_profilingStarted.load(std::memory_order_acquire))
+		{
+			g_shm->header.alive.fetch_add(1, std::memory_order_release); // heartbeat
+
+			TickMemoryProfiler();
+			std::this_thread::sleep_for(std::chrono::milliseconds(10));
+		}
+	}
+
+
+	void StartMemoryProfiler()
+	{
+		g_profilingEnabled.store(true, std::memory_order_release);
+		g_profilingStarted.store(true, std::memory_order_release);
+		g_memoryProfilerThread = std::thread(MemoryProfilerThread);
+		g_memoryProfilerThread.detach();
+	}
+
+	void LaunchHelper()
+	{
+
+		_MESSAGE("Launching CrashLoggerHelper.exe...");
+
+		char helperPath[MAX_PATH]{};
+
+		if (!GetModuleFileNameA(g_hThisDLL, helperPath, MAX_PATH))
+			return;
+
+		char* slash = strrchr(helperPath, '\\');
+		if (!slash)
+			return;
+
+		slash[1] = 0;
+		strcat_s(helperPath, "CrashLoggerHelper.exe");
+		_MESSAGE("%s",helperPath);
+
+		if (GetFileAttributesA(helperPath) == INVALID_FILE_ATTRIBUTES)
+		{
+			_ERROR("CrashLoggerHelper.exe not found: %s", helperPath);
 			return;
 		}
 
-		output << "=== Allocation Dump ===\n\n";
+		char cmdLine[64];
+		sprintf_s(cmdLine, "%lu", GetCurrentProcessId());
 
-		char workingDirectory[MAX_PATH];
-		char symbolPath[MAX_PATH];
-		char altSymbolPath[MAX_PATH];
-		GetCurrentDirectory(MAX_PATH, workingDirectory);
-		GetEnvironmentVariable("_NT_SYMBOL_PATH", symbolPath, MAX_PATH);
-		GetEnvironmentVariable("_NT_ALTERNATE_SYMBOL_PATH", altSymbolPath, MAX_PATH);
-		std::string lookPath = std::format("{};{}\\Data\\OBSE\\plugins;{};{}", workingDirectory, workingDirectory, symbolPath, altSymbolPath);
+		STARTUPINFOA si{};
+		si.cb = sizeof(si);
+		PROCESS_INFORMATION pi{};
 
-		char newSymbolPath[MAX_PATH] = {};
-		if (!SymGetSearchPath(hProcess, newSymbolPath, MAX_PATH)) {
-			SymCleanup(hProcess);
-			SymInitialize(hProcess, lookPath.c_str(), TRUE);
+		BOOL ok = CreateProcessA(
+			helperPath,
+			cmdLine,
+			nullptr,
+			nullptr,
+			FALSE,
+			CREATE_NO_WINDOW,
+			nullptr,
+			nullptr,
+			&si,
+			&pi
+		);
+
+		if (!ok)
+		{
+			_ERROR("Failed to launch helper (%lu)", GetLastError());
 		}
-
-		for (const auto& [addr, count] : sortedEntries) {
-			std::string symbol = PDB::GetSymbol(addr, hProcess);
-			if (symbol.empty())
-				symbol = std::format("0x{:08X}", addr);
-
-			output << std::format("Count: {:6} | 0x{:08X} | {}\n", count, addr, symbol);
+		else
+		{
+			CloseHandle(pi.hThread);
+			CloseHandle(pi.hProcess);
+			_MESSAGE("Done.");
 		}
-
-		output << "\n=== End of Dump ===\n";
-		output.close();
-
-		_MESSAGE("Wrote allocation dump to AllocDump.txt (%zu entries)", sortedEntries.size());
 	}
 
 	extern void Process(EXCEPTION_POINTERS* info)
-	try 
+		try
 	{
 		const auto hProcess = GetCurrentProcess();
-
 
 		PROCESS_MEMORY_COUNTERS_EX pmc = {};
 		pmc.cb = sizeof(pmc);
@@ -397,7 +470,7 @@ namespace CrashLogger::Memory
 		MEMORYSTATUSEX memoryStatus;
 		memoryStatus.dwLength = sizeof(memoryStatus);
 		GlobalMemoryStatusEx(&memoryStatus);
-		if ( GetProcessMemoryInfo( hProcess, (PROCESS_MEMORY_COUNTERS*)&pmc, sizeof(pmc)) )
+		if (GetProcessMemoryInfo(hProcess, (PROCESS_MEMORY_COUNTERS*)&pmc, sizeof(pmc)))
 		{
 			DWORDLONG virtUsage = memoryStatus.ullTotalVirtual - memoryStatus.ullAvailVirtual;
 			DWORDLONG physUsage = pmc.PrivateUsage;
@@ -406,59 +479,48 @@ namespace CrashLogger::Memory
 			output << std::format("Virtual  Usage: {}", GetMemoryUsageString(virtUsage, memoryStatus.ullTotalVirtual)) << '\n';
 		}
 
-		if (g_formHeap) {
+		if (g_formHeap)
+		{
 			UInt32 usedHeapMemory = 0;
 			UInt32 totalHeapMemory = 0;
 
 			output << "\n================================\n";
-
 			output << "\nGame's Memory:" << '\n';
 
 			UInt8* mainHeap = (UInt8*)g_formHeap->field_018;
 			UInt8* mainHeapEnd = mainHeap + g_formHeap->field_00C;
 			SIZE_T used = g_formHeap->field_014;
 			SIZE_T total = g_formHeap->field_00C;
+
 #if PRINT_HEAPS
 			SIZE_T start = reinterpret_cast<std::uintptr_t>(mainHeap);
 			SIZE_T end = reinterpret_cast<std::uintptr_t>(mainHeapEnd);
-			
-			/*if (stats.uiHeapOverhead == sizeof(ZeroOverheadHeap)) {
-				start = reinterpret_cast<SIZE_T>(static_cast<ZeroOverheadHeap*>(heap)->pHeap);
-				end = start + static_cast<ZeroOverheadHeap*>(heap)->uiSize;
-			}
-			else {
-				start = reinterpret_cast<SIZE_T>(static_cast<MemoryHeap*>(heap)->pMemHeap);
-				end = start + static_cast<MemoryHeap*>(heap)->uiMemHeapSize;
-			}*/
-
-			output << std::format("{:30}	 {}	  ({:08X} - {:08X})", "FormHeap", GetMemoryUsageString(used, total), start, end) << '\n';
+			output << std::format("{:30}   {}   ({:08X} - {:08X})", "FormHeap",
+				GetMemoryUsageString(used, total), start, end) << '\n';
 #endif
 			usedHeapMemory += used;
 			totalHeapMemory += total;
-
-			
-
-
 
 			SIZE_T uiPoolMemory = 0;
 			SIZE_T uiTotalPoolMemory = 0;
 #if PRINT_POOLS
 			output << "\nPools:" << '\n';
 #endif
-			for (UInt32 i = 0; i < 256; i++) {
+			for (UInt32 i = 0; i < 256; i++)
+			{
 				MemoryPool* pPool = g_memoryHeap_poolsByAddress[i];
-				if (!pPool)
-					continue;
+				if (!pPool) continue;
 
-				SIZE_T used = pPool->field_10C;
-				SIZE_T total = pPool->field_110;
+				SIZE_T poolUsed = pPool->field_10C;
+				SIZE_T poolTotal = pPool->field_110;
 
-				uiPoolMemory += used;
-				uiTotalPoolMemory += total;
+				uiPoolMemory += poolUsed;
+				uiTotalPoolMemory += poolTotal;
 #if PRINT_POOLS
-				SIZE_T start = reinterpret_cast<SIZE_T>(pPool->field_108);
-				SIZE_T end = start + pPool->field_110;
-				output << std::format("{:30}	 {}	  ({:08X} - {:08X})", pPool->m_name, GetMemoryUsageString(used, total), start, end) << '\n';
+				SIZE_T poolStart = reinterpret_cast<SIZE_T>(pPool->field_108);
+				SIZE_T poolEnd = poolStart + pPool->field_110;
+				output << std::format("{:30}   {}   ({:08X} - {:08X})", pPool->m_name,
+					GetMemoryUsageString(poolUsed, poolTotal), poolStart, poolEnd) << '\n';
 #endif
 			}
 
@@ -466,11 +528,17 @@ namespace CrashLogger::Memory
 			output << std::format("Total Pool Memory: {}", GetMemoryUsageString(uiPoolMemory, uiTotalPoolMemory)) << '\n';
 			output << std::format("Total Memory:      {}", GetMemoryUsageString(usedHeapMemory + uiPoolMemory, totalHeapMemory + uiTotalPoolMemory)) << '\n';
 
-			
-			DumpAllocStats(hProcess);
+			FlushThreadLogsToSharedMemory();
 		}
 	}
-	catch (...) { output << "Failed to log memory." << '\n'; }
+	catch (...)
+	{
+		output << "Failed to log memory." << '\n';
+	}
 
-	extern std::stringstream& Get() { output.flush(); return output; }
+	extern std::stringstream& Get()
+	{
+		output.flush();
+		return output;
+	}
 }

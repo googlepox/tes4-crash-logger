@@ -138,6 +138,7 @@
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Memory.cpp" />
     <ClCompile Include="Modules.cpp" />
+    <ClCompile Include="PDB.cpp" />
     <ClCompile Include="RegistryStack.cpp" />
     <ClCompile Include="..\OBSE\obse\obse\GameActorValues.cpp" />
     <ClCompile Include="..\OBSE\obse\obse\GameAPI.cpp" />
@@ -159,14 +160,17 @@
     <ClCompile Include="..\OBSE\obse\StdAfx.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="SharedMem.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="CrashLogger.hpp" />
+    <ClInclude Include="PDB.h" />
     <ClInclude Include="Definitions.hpp" />
     <ClInclude Include="ExceptionHandler.hpp" />
     <ClInclude Include="Formatter.hpp" />
     <ClInclude Include="Logging.hpp" />
     <ClInclude Include="RTTI.hpp" />
+    <ClInclude Include="SharedMem.h" />
     <ClInclude Include="Utilities.hpp" />
     <ClInclude Include="..\OBSE\obse\obse\GameActorValues.h" />
     <ClInclude Include="..\OBSE\obse\obse\GameAPI.h" />

@@ -1,4 +1,40 @@
+#pragma once
 #include <format>
+
+inline void* CreateTrampoline(uintptr_t target, size_t patchSize)
+{
+	if (patchSize < 5) return nullptr;
+	size_t trampSize = patchSize + 5;
+	uint8_t* trampoline = static_cast<uint8_t*>(
+		VirtualAlloc(nullptr, trampSize, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE)
+		);
+	if (!trampoline) return nullptr;
+
+	memcpy(trampoline, reinterpret_cast<void*>(target), patchSize);
+
+	uintptr_t retAddr = target + patchSize;
+	uintptr_t jmpFrom = reinterpret_cast<uintptr_t>(trampoline + patchSize);
+	int32_t relBack = static_cast<int32_t>(retAddr - (jmpFrom + 5));
+	trampoline[patchSize] = 0xE9;
+	*reinterpret_cast<int32_t*>(trampoline + patchSize + 1) = relBack;
+
+	return trampoline;
+}
+
+inline bool PatchJump(uintptr_t target, void* hookFunc)
+{
+	DWORD old;
+	if (!VirtualProtect(reinterpret_cast<void*>(target), 5, PAGE_EXECUTE_READWRITE, &old))
+		return false;
+
+	uintptr_t hookAddr = reinterpret_cast<uintptr_t>(hookFunc);
+	int32_t rel = static_cast<int32_t>(hookAddr - (target + 5));
+	uint8_t jmp = 0xE9;
+	memcpy(reinterpret_cast<void*>(target), &jmp, 1);
+	memcpy(reinterpret_cast<void*>(target + 1), &rel, 4);
+	VirtualProtect(reinterpret_cast<void*>(target), 5, old, &old);
+	return true;
+}
 
 inline int ExceptionFilter(unsigned int code)
 {
@@ -212,3 +248,24 @@ const char* const TypeNames[69] = {
 	"Effect Shader",
 	"TOFT",
 };
+
+inline bool IsReadablePtr(const void* p, size_t size = sizeof(void*))
+{
+	MEMORY_BASIC_INFORMATION mbi{};
+	if (!VirtualQuery(p, &mbi, sizeof(mbi)))
+		return false;
+
+	if (mbi.State != MEM_COMMIT)
+		return false;
+
+	if (mbi.Protect & (PAGE_NOACCESS | PAGE_GUARD))
+		return false;
+
+	uintptr_t start = reinterpret_cast<uintptr_t>(p);
+	uintptr_t end = start + size;
+
+	uintptr_t regionEnd =
+		reinterpret_cast<uintptr_t>(mbi.BaseAddress) + mbi.RegionSize;
+
+	return end <= regionEnd;
+}
