@@ -1,189 +1,181 @@
 #include "PDB.h"
 #include <DbgHelp.h>
-#include "Utilities.hpp"
+#include <windows.h>
+#include <iostream>
+#include <string>
+
+#pragma comment(lib, "DbgHelp.lib")  
 
 namespace CrashLogger::PDB
 {
-	extern std::string GetModule(UInt32 eip, HANDLE process)
-	{
-		IMAGEHLP_MODULE module = { 0 };
-		module.SizeOfStruct = sizeof(IMAGEHLP_MODULE);
-		if (!SymGetModuleInfo(process, eip, &module)) return "";
+    std::string GetModule(UInt32 eip, HANDLE process)
+    {
+        IMAGEHLP_MODULE module = {};
+        module.SizeOfStruct = sizeof(module);
+        if (!SymGetModuleInfo(process, eip, &module)) return "";
+        return module.ModuleName;
+    }
 
-		return module.ModuleName;
-	}
+    UInt32 GetModuleBase(UInt32 eip, HANDLE process)
+    {
+        IMAGEHLP_MODULE module = {};
+        module.SizeOfStruct = sizeof(module);
+        if (!SymGetModuleInfo(process, eip, &module)) return 0;
+        return module.BaseOfImage;
+    }
 
-	extern UInt32 GetModuleBase(UInt32 eip, HANDLE process)
-	{
-		IMAGEHLP_MODULE module = { 0 };
-		module.SizeOfStruct = sizeof(IMAGEHLP_MODULE);
-		if (!SymGetModuleInfo(process, eip, &module)) return 0;
+    std::string GetSymbol(UInt32 eip, HANDLE process)
+    {
+        char symbolBuffer[sizeof(SYMBOL_INFO) + 255];
+        SYMBOL_INFO* symbol = reinterpret_cast<SYMBOL_INFO*>(symbolBuffer);
+        symbol->SizeOfStruct = sizeof(SYMBOL_INFO);
+        symbol->MaxNameLen = 254;
 
-		return module.BaseOfImage;
-	}
+        DWORD64 offset = 0;
+        if (!SymFromAddr(process, eip, &offset, symbol)) return "";
 
-	extern std::string GetSymbol(UInt32 eip, HANDLE process)
-	{
-		char symbolBuffer[sizeof(SYMBOL_INFO) + 255];
-		const auto symbol = (SYMBOL_INFO*)symbolBuffer;
-		symbol->SizeOfStruct = sizeof(SYMBOL_INFO);
-		symbol->MaxNameLen = 254;
-		DWORD64 offset = 0;
-		if (!SymFromAddr(process, eip, &offset, symbol)) return "";
-		const std::string functioName = symbol->Name;
-		return std::format("{}+0x{:0X}", functioName, offset);
-	}
+        // Format with hex offset, not decimal
+        return std::format("{}+0x{:X}", symbol->Name, offset);
+    }
 
-	extern std::string GetLine(UInt32 eip, HANDLE process)
-	{
-		char lineBuffer[sizeof(IMAGEHLP_LINE) + 255];
-		const auto line = (IMAGEHLP_LINE*)lineBuffer;
-		line->SizeOfStruct = sizeof(IMAGEHLP_LINE);
+    std::string GetLine(UInt32 eip, HANDLE process)
+    {
+        char lineBuffer[sizeof(IMAGEHLP_LINE) + 255];
+        IMAGEHLP_LINE* line = reinterpret_cast<IMAGEHLP_LINE*>(lineBuffer);
+        line->SizeOfStruct = sizeof(IMAGEHLP_LINE);
 
-		DWORD offset = 0;
+        DWORD offset = 0;
+        if (!SymGetLineFromAddr(process, eip, &offset, line)) return "";
+        return std::format("{}:{}", line->FileName, line->LineNumber);
+    }
 
-		if (!SymGetLineFromAddr(process, eip, &offset, line)) return "";
+    bool IsReadable(const void* p, size_t size)
+    {
+        MEMORY_BASIC_INFORMATION mbi{};
+        if (!VirtualQuery(p, &mbi, sizeof(mbi))) return false;
+        if (mbi.State != MEM_COMMIT) return false;
+        if (mbi.Protect & (PAGE_NOACCESS | PAGE_GUARD)) return false;
+        return size <= mbi.RegionSize;
+    }
 
-		return std::format("{}:{:d}", line->FileName, line->LineNumber);
-	}
+    const char* GetObjectClassNameSafe(void* objBase)
+    {
+        if (!objBase) return "";
+        if (!IsReadable(objBase, sizeof(void*))) return "";
 
-	std::string& GetClassNameGetSymbol(void* object, std::string& buffer)
-	{
-		buffer = GetSymbol(*((UInt32*)object), GetCurrentProcess());
-		return buffer;
-	}
+        void** vtbl = *(void***)objBase;
+        if (!vtbl) return "";
+        if (!IsReadable(vtbl - 1, sizeof(void*))) return "";
 
-	std::string& GetClassNameFromPDBSEH(void* object, std::string& buffer)
-		try { GetClassNameGetSymbol(object, buffer); return buffer; }
-	catch (...) { return buffer; }
+        void* colPtr = vtbl[-1];
+        if (!colPtr) return "";
+        if (!IsReadable(colPtr, sizeof(RTTILocator))) return "";
 
+        RTTILocator* rtti = static_cast<RTTILocator*>(colPtr);
+        if (!rtti->type || !IsReadable(rtti->type, sizeof(RTTIType))) return "";
 
-	std::string GetClassNameFromPDB(void* object)
-	{
-		std::string name;
-		GetClassNameFromPDBSEH(object, name);
-		return name.substr(0, name.find("::`vftable'"));
-	}
+        RTTIType* type = rtti->type;
+        if (!IsReadable(type->name, 4)) return "";
+        if (type->name[0] != '.' || type->name[1] != '?') return "";
 
-	// use the RTTI information to return an object's class name
-	const char* GetObjectClassNameInternal2(void* objBase)
-	{
-		__try
-		{
-			const char* result = "";
-			void** obj = (void**)objBase;
-			RTTILocator** vtbl = (RTTILocator**)obj[0];
-			RTTILocator* rtti = vtbl[-1];
-			RTTIType* type = rtti->type;
+        for (UInt32 i = 0; i < MAX_PATH; i++)
+        {
+            if (!IsReadable(&type->name[i], 1)) return "";
+            if (type->name[i] == '\0') return type->name;
+        }
+        return "";
+    }
 
-			if (!type) return "";
-			// starts with .?AV
-			if ((type->name[0] == '.') && (type->name[1] == '?'))
-			{
-				// is at most MAX_PATH chars long
-				for (UInt32 i = 0; i < MAX_PATH; i++) if (type->name[i] == 0)
-				{
-					result = type->name;
-					break;
-				}
-			}
-			return result;
-		}
-		__except (ExceptionFilter(GetExceptionCode()))
-		{
-			return "";
-		}
-	}
+    std::string GetClassNameFromRTTI(void* object)
+    {
+        std::string name = GetObjectClassNameSafe(object);
+        if (name.empty()) return "";
 
-	static bool IsReadable(const void* p, size_t size = sizeof(void*))
-	{
-		MEMORY_BASIC_INFORMATION mbi{};
-		if (!VirtualQuery(p, &mbi, sizeof(mbi)))
-			return false;
+        char buffer[MAX_PATH] = {};
+        UnDecorateSymbolName(name.c_str() + 1, buffer, MAX_PATH, UNDNAME_NO_ARGUMENTS);
+        std::string undecorated = buffer;
 
-		if (mbi.State != MEM_COMMIT)
-			return false;
+        if (undecorated.size() > 6)
+            return undecorated.substr(6);
+        return undecorated;
+    }
 
-		if (mbi.Protect & (PAGE_NOACCESS | PAGE_GUARD))
-			return false;
+    std::string GetClassNameFromPDB(void* object, HANDLE hProcess)
+    {
+        if (!object) return "";
 
-		return size <= mbi.RegionSize;
-	}
+        // Check alignment
+        if ((reinterpret_cast<uintptr_t>(object) & 0x3) != 0)
+            return "";
 
-	const char* GetObjectClassNameSafe(void* objBase)
-	{
-		if (!objBase) return "";
+        // Validate readable
+        if (!IsReadable(object, sizeof(void*)))
+            return "";
 
-		// 1) Validate object base
-		if (!IsReadable(objBase, sizeof(void*)))
-			return "";
+        std::string name;
+        try
+        {
+            // Read the vtable pointer
+            void* vtablePtr = *reinterpret_cast<void**>(object);
+            if (!vtablePtr) return "";
 
-		// 2) Read vtable pointer
-		void** vtbl = *(void***)objBase;
-		if (!vtbl)
-			return "";
+            // Verify vtable is in read-only/executable memory
+            MEMORY_BASIC_INFORMATION mbi{};
+            if (!VirtualQuery(vtablePtr, &mbi, sizeof(mbi)))
+                return "";
 
-		// 3) Validate vtable memory (at least one pointer BEFORE it)
-		if (!IsReadable(vtbl - 1, sizeof(void*)))
-			return "";
+            if (!(mbi.Protect & (PAGE_EXECUTE_READ | PAGE_READONLY)))
+                return "";
 
-		// 4) Read RTTI locator POINTER VALUE
-		void* colPtr = vtbl[-1];
-		if (!colPtr)
-			return "";
+            // Get symbol for vtable address
+            name = GetSymbol(reinterpret_cast<UInt32>(vtablePtr), hProcess);
+        }
+        catch (...)
+        {
+            return "";
+        }
 
-		// 5) Validate RTTI locator structure memory
-		if (!IsReadable(colPtr, sizeof(PDB::RTTILocator)))
-			return "";
+        // Look for vftable marker
+        size_t pos = name.find("::`vftable'");
+        if (pos == std::string::npos)
+            return "";  // Not a vtable symbol
 
-		auto* rtti = static_cast<PDB::RTTILocator*>(colPtr);
+        return name.substr(0, pos);
+    }
 
-		// 6) Validate RTTIType pointer
-		if (!rtti->type || !IsReadable(rtti->type, sizeof(PDB::RTTIType)))
-			return "";
+    std::string GetClassNameFromRTTIorPDB(void* object, HANDLE hProcess)
+    {
+        if (!object) return "";
 
-		auto* type = rtti->type;
+        // Check alignment first
+        if ((reinterpret_cast<uintptr_t>(object) & 0x3) != 0)
+            return "";
 
-		// 7) Validate name pointer
-		if (!IsReadable(type->name, 4))
-			return "";
+        // Try RTTI first (more reliable)
+        std::string str = GetClassNameFromRTTI(object);
+        if (!str.empty())
+        {
+            // Additional validation: reject obvious garbage
+            if (str.find('+') != std::string::npos)
+                return "";
+            if (str.find("Rtl") == 0 || str.find("Nt") == 0)
+                return "";
+            return str;
+        }
 
-		// 8) MSVC RTTI names start with ".?AV"
-		if (type->name[0] != '.' || type->name[1] != '?')
-			return "";
+        // Try PDB symbols
+        str = GetClassNameFromPDB(object, hProcess);
+        if (!str.empty())
+        {
+            // Reject function offsets
+            if (str.find('+') != std::string::npos)
+                return "";
+            // Reject system functions
+            if (str.find("Rtl") == 0 || str.find("Nt") == 0 ||
+                str.find("BCrypt") == 0 || str.find("Ordinal") == 0)
+                return "";
+        }
 
-		// 9) Ensure null termination
-		for (UInt32 i = 0; i < MAX_PATH; i++)
-		{
-			if (!IsReadable(&type->name[i], 1))
-				return "";
-
-			if (type->name[i] == '\0')
-				return type->name;
-		}
-
-		return "";
-	}
-
-	std::string GetClassNameFromRTTI(void* object)
-	{
-		//std::string name = GetObjectClassNameInternal2(object);
-		std::string name = GetObjectClassNameSafe(object);
-		if (name.empty()) return name;
-		// Starts with .?AV, ends with @@
-//		return name.substr(4, name.size() - 6);
-
-		char buffer[MAX_PATH];
-		UnDecorateSymbolName(name.substr(1, name.size() - 1).c_str(), buffer, MAX_PATH, UNDNAME_NO_ARGUMENTS);
-		name = buffer;
-
-		return name.substr(6, name.size() - 6);
-	}
-
-	extern std::string GetClassNameFromRTTIorPDB(void* object)
-	{
-		if (const auto str = GetClassNameFromRTTI(object); !str.empty()) return str;
-		return GetClassNameFromPDB(object);
-		//if (const auto str = GetClassNameFromPDB(object); !str.contains("0x")) return str;
-	}
-};
+        return str;
+    }
+}

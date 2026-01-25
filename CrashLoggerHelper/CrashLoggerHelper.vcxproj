@@ -80,6 +80,7 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -91,10 +92,12 @@
       <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp23</LanguageStandard>
+      <AdditionalIncludeDirectories>$(SolutionDir)..\OBSE;$(SolutionDir)..\OBSE\obse\;$(SolutionDir)..\OBSE\obse\obse;$(SolutionDir)..\OBSE\obse\obse_common;$(SolutionDir)..\OBSE\common;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -124,6 +127,8 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="..\CrashLogger\CrashLoggerAPI.h" />
+    <ClInclude Include="..\CrashLogger\PDB.h" />
     <ClInclude Include="..\CrashLogger\SharedMem.h" />
     <ClInclude Include="CrashLoggerHelper.h" />
     <ClInclude Include="framework.h" />
@@ -131,6 +136,10 @@
     <ClInclude Include="targetver.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\CrashLogger\CLUtilities.cpp" />
+    <ClCompile Include="..\CrashLogger\CrashLoggerAPI.cpp" />
+    <ClCompile Include="..\CrashLogger\MemoryProbe.cpp" />
+    <ClCompile Include="..\CrashLogger\PDB.cpp" />
     <ClCompile Include="..\CrashLogger\SharedMem.cpp" />
     <ClCompile Include="CrashLoggerHelper.cpp" />
   </ItemGroup>
@@ -140,6 +149,17 @@
   <ItemGroup>
     <Image Include="CrashLoggerHelper.ico" />
     <Image Include="small.ico" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\CrashLogger\CrashLogger.vcxproj">
+      <Project>{a0b4387f-4d59-452a-af0c-fc5207a55713}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\OBSE\common\common.vcxproj">
+      <Project>{20c6411c-596f-4b85-be4e-8bc91f59d8a6}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\OBSE\obse\obse\obse.vcxproj">
+      <Project>{01b76b21-f851-436e-acea-64fa03be8c59}</Project>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

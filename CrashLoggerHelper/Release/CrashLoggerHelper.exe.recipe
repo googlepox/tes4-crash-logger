@@ -2,6 +2,9 @@
 <Project>
   <ProjectOutputs>
     <ProjectOutput>
+      <FullPath>C:\Users\brand\Desktop\GameDev\OB\xOBSE\tes4-crash-logger\CrashLogger\Release\CobbCrashLogger.dll</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
       <FullPath>C:\Users\brand\Desktop\GameDev\OB\xOBSE\tes4-crash-logger\CrashLogger\Release\CrashLoggerHelper.exe</FullPath>
     </ProjectOutput>
   </ProjectOutputs>

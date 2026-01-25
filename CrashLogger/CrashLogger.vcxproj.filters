@@ -4,6 +4,12 @@
     <Filter Include="obse">
       <UniqueIdentifier>{a47d661a-32d4-4943-be34-61962d2d4718}</UniqueIdentifier>
     </Filter>
+    <Filter Include="include">
+      <UniqueIdentifier>{2e6d317e-f813-4190-8358-ee6b8856aa5b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="internal">
+      <UniqueIdentifier>{125a1277-c88c-4078-a03f-6edfebac17d0}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dllmain.c" />
@@ -73,15 +79,14 @@
     </ClCompile>
     <ClCompile Include="PDB.cpp" />
     <ClCompile Include="SharedMem.cpp" />
+    <ClCompile Include="CrashLoggerAPI.cpp" />
+    <ClCompile Include="MemoryProbe.cpp" />
+    <ClCompile Include="CLUtilities.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="CrashLogger.hpp" />
     <ClInclude Include="ExceptionHandler.hpp" />
     <ClInclude Include="Definitions.hpp" />
-    <ClInclude Include="Utilities.hpp" />
     <ClInclude Include="RTTI.hpp" />
-    <ClInclude Include="Formatter.hpp" />
-    <ClInclude Include="Logging.hpp" />
     <ClInclude Include="..\OBSE\obse\obse\GameActorValues.h">
       <Filter>obse</Filter>
     </ClInclude>
@@ -142,8 +147,42 @@
     <ClInclude Include="..\OBSE\obse\obse_common\SafeWrite.h">
       <Filter>obse</Filter>
     </ClInclude>
-    <ClInclude Include="PDB.h" />
     <ClInclude Include="SharedMem.h" />
+    <ClInclude Include="CrashLoggerAPI.h">
+      <Filter>include</Filter>
+    </ClInclude>
+    <ClInclude Include="CLUtilities.hpp">
+      <Filter>internal</Filter>
+    </ClInclude>
+    <ClInclude Include="PDB.h">
+      <Filter>internal</Filter>
+    </ClInclude>
+    <ClInclude Include="Labels.hpp" />
+    <ClInclude Include="RegistryStack.h" />
+    <ClInclude Include="StackAPI.hpp">
+      <Filter>include</Filter>
+    </ClInclude>
+    <ClInclude Include="MemoryProbe.hpp">
+      <Filter>internal</Filter>
+    </ClInclude>
+    <ClInclude Include="Dereference.hpp">
+      <Filter>internal</Filter>
+    </ClInclude>
+    <ClInclude Include="LabelsOBSE.h">
+      <Filter>internal</Filter>
+    </ClInclude>
+    <ClInclude Include="CrashLogger.hpp">
+      <Filter>internal</Filter>
+    </ClInclude>
+    <ClInclude Include="Logging.hpp">
+      <Filter>internal</Filter>
+    </ClInclude>
+    <ClInclude Include="LogClassByLine.h">
+      <Filter>internal</Filter>
+    </ClInclude>
+    <ClInclude Include="Formatter.hpp">
+      <Filter>internal</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="exports.def" />

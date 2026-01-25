@@ -1,7 +1,8 @@
-#include "CrashLogger.hpp"
-#include "Formatter.hpp"
-#include "RTTI.hpp"
-#include "GameForms.h"
+#include "LabelsOBSE.h"
+
+#include <Windows.h>
+#include <format>
+#include <algorithm>
 
 namespace CrashLogger::Labels
 {

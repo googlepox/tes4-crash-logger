@@ -3,81 +3,8 @@
 #include <iostream>
 #include <ios>
 #include <istream>
-
-namespace CrashLogger
-{
-
-	inline bool GetStringForClassLabel(void* object, std::string& labelName, std::string& objectName, std::string& description)
-	{
-		try
-		{
-			static bool fillLables = false;
-
-			if (!fillLables)
-			{
-				Labels::FillLabels();
-				fillLables = true;
-			}
-
-			for (const auto& iter : Labels::Label::GetAll()) if (iter && iter->Satisfies(object))
-			{
-				labelName = iter->GetLabelName();
-				objectName = iter->GetName(object);
-				description = iter->GetDescription(object);
-				return true;
-			}
-			return false;
-		}
-		catch (...) {
-			return false;
-		}
-	}
-
-	bool GetAsString(const void* object, std::string& labelName, std::string& string)
-	{
-		//if(IsBadReadPtr(object, 1)) return false;
-
-		try {
-			const auto printable = [](const char a_ch) noexcept {
-				if (' ' <= a_ch && a_ch <= '~') return true;
-
-				switch (a_ch) {
-				case '\t':
-				case '\n':
-					return true;
-				default:
-					return false;
-				}
-				};
-			const auto cstr = static_cast<const char*>(object);
-			if (object == NULL || cstr == NULL) return false;
-			constexpr std::size_t max = MAX_PATH;
-			std::size_t len = 0;
-			for (; len < max && cstr && cstr[len] != '\0'; ++len) {
-				if (!printable(cstr[len])) {
-					return false;
-				}
-			}
-			if (len == 0 || len >= max || len < 3) return false;
-			const auto str = SanitizeString(cstr);
-			// Check if string is equal to a predefined prefix and print out the file name if true
-			if (const auto pos = str.find("D:\\_Oblivion\\"); pos == std::string::npos) {
-				labelName = "String";
-				string = str;
-			}
-			else {
-				const std::filesystem::path path = str.substr(pos);
-				labelName = "Source";
-				string = path.filename().string();
-			}
-			return true;
-		}
-		catch (...) {
-			return false;
-		}
-
-	}
-	}
+#include "CrashLoggerAPI.h"
+#include "StackAPI.hpp"
 
 namespace CrashLogger::Registry
 {
@@ -106,7 +33,7 @@ namespace CrashLogger::Registry
 			{
 				std::stringstream str;
 				str << std::format("{} | 0x{:08X} | ", name, value);
-				std::string buffer = Stack::GetLineForObject((void**)value, 5);
+				std::string buffer = Stack::GetLineForObject((void**)value, 5, GetCurrentProcess());
 				if (!buffer.empty() && buffer != "") {
 					str << buffer;
 				}
@@ -125,69 +52,6 @@ namespace CrashLogger::Stack
 
 	std::stringstream output;
 
-	bool GetStringForRTTIorPDB(void** object, std::string& buffer)
-		try {
-		//		if (*(UInt32*)object > VFTableLowerLimit() && *(UInt32*)object < 0x1200000)
-			{
-				if (const auto& name = PDB::GetClassNameFromRTTIorPDB((void*)object); !name.empty())
-				{
-					buffer += std::format("0x{:08X} ==> RTTI: ", *(UInt32*)object) + name;
-					return true;
-				}
-			}
-			return false;
-	}
-	catch (...) { return false; }
-
-
-	bool GetRealStringForLabel(void** object, std::string& buffer){
-		std::string labelName, objectName, description;
-		if (GetStringForClassLabel(object, labelName, objectName, description))
-		{
-			buffer += std::format("0x{:08X} ==> ", *(UInt32*)object) + labelName + ": " + objectName + ": " + description;
-			return true;
-		}
-
-		if (GetStringForRTTIorPDB(object, buffer)) {
-			return true;
-		}
-		if (GetAsString(object, labelName, description))
-		{
-			buffer += std::format("0x{:08X} ==> ", *(UInt32*)object) + labelName + ": " + '"' + description + '"';
-			return true;
-		}
-
-		return false;
-	}
-
-	bool GetStringForLabel(void** object, std::string& buffer){
-		__try {
-			return GetRealStringForLabel(object, buffer );
-		}
-		__except(EXCEPTION_EXECUTE_HANDLER){
-			return false;
-		}
-	}
-
-	std::string GetLineForObject(void** object, UInt32 depth)
-	{
-		if (!object) return "";
-		std::string buffer;
-		UInt32 deref = 0;
-		do
-		{
-			if (GetStringForLabel(object, buffer)) {
-				return buffer;
-			} 
-			deref = Dereference<UInt32>(object);
-			buffer += std::format("0x{:08X} ==> ", deref);
-			object = (void**)deref;
-			depth--;
-		} while (object && depth);
-
-		return "";
-	}
-
 	UInt32 GetESPi(UInt32* esp, UInt32 i) try { return esp[i]; }
 	catch (...) { return 0; }
 
@@ -197,7 +61,7 @@ namespace CrashLogger::Stack
 		const auto esp = reinterpret_cast<UInt32*>(info->ContextRecord->Esp);
 		for (unsigned int i : std::views::iota(0x0, 0x100)) {
 			const auto espi = GetESPi(esp, i);
-			const auto str = Stack::GetLineForObject((void**)espi, 5);
+			const auto str = Stack::GetLineForObject((void**)espi, 5, GetCurrentProcess());
 			if (i <= 0x8 || (!str.empty() && !memoize.contains(espi)))
 			{
 				std::stringstream line;

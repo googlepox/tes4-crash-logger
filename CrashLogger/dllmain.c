@@ -6,5 +6,5 @@ BOOL WINAPI DllMain(
         LPVOID  lpreserved
         )
 {
-	return TRUE;
+    return TRUE;
 }

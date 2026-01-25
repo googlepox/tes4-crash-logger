@@ -1,5 +1,15 @@
 #pragma once
+#define WIN32_LEAN_AND_MEAN
+#include <Windows.h>
 #include <format>
+#include <cstdint>
+#include <string>
+#include <string_view>
+#include <algorithm>
+#include <cstring>
+#include <cstddef>
+#include <ITypes.h>
+
 
 inline void* CreateTrampoline(uintptr_t target, size_t patchSize)
 {
@@ -36,10 +46,7 @@ inline bool PatchJump(uintptr_t target, void* hookFunc)
 	return true;
 }
 
-inline int ExceptionFilter(unsigned int code)
-{
-	return EXCEPTION_EXECUTE_HANDLER;
-}
+int CrashLoggerExceptionFilter(unsigned int code);
 
 inline std::string& SanitizeStringBySize(std::string& str)
 {
@@ -58,42 +65,43 @@ inline std::string& SanitizeStringFromBadData(std::string& str)
 	return str;
 }
 
-inline std::string pcName;
-inline std::string userName;
+extern std::string pcName;
+extern std::string userName;
 
 inline std::string& SanitizeStringFromUserInfo(std::string& str)
 {
-	[[unlikely]]
 	if (pcName.empty())
 	{
-		TCHAR infoBuf[MAX_PATH];
-		DWORD bufCharCount = MAX_PATH;
-		if (GetComputerName(infoBuf, &bufCharCount)) pcName = infoBuf;
+		char infoBuf[MAX_PATH];
+		DWORD size = MAX_PATH;
+		if (GetComputerNameA(infoBuf, &size))
+			pcName.assign(infoBuf, size);
 	}
 
-	[[unlikely]]
 	if (userName.empty())
 	{
-		TCHAR infoBuf[MAX_PATH];
-		DWORD bufCharCount = MAX_PATH;
-		if (GetUserName(infoBuf, &bufCharCount)) userName = infoBuf;
+		char infoBuf[MAX_PATH];
+		DWORD size = MAX_PATH;
+		if (GetUserNameA(infoBuf, &size))
+			userName.assign(infoBuf, size - 1); // excludes null
 	}
 
-	if (pcName.size() > 1)
-		while (str.find(pcName) != -1) str.replace(str.find(pcName), pcName.size(), pcName.size(), '*');
+	if (!pcName.empty())
+		while (str.find(pcName) != std::string::npos)
+			str.replace(str.find(pcName), pcName.size(), pcName.size(), '*');
 
-	if (userName.size() > 1)
-		while (str.find(userName) != -1) str.replace(str.find(userName), userName.size(), userName.size(), '*');
+	if (!userName.empty())
+		while (str.find(userName) != std::string::npos)
+			str.replace(str.find(userName), userName.size(), userName.size(), '*');
 
 	return str;
 }
 
-inline const std::string& SanitizeString(std::string&& str)
+inline std::string SanitizeString(std::string str)
 {
 	SanitizeStringBySize(str);
 	SanitizeStringFromBadData(str);
 	SanitizeStringFromUserInfo(str);
-
 	return str;
 }
 
@@ -178,7 +186,7 @@ inline std::string GetExceptionAsString(UInt32 exceptionMessageID)
 	}
 }
 
-const char* const TypeNames[69] = {
+inline const char* const TypeNames[69] = {
 	"None",
 	"TES4",
 	"Group",

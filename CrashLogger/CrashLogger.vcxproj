@@ -63,7 +63,7 @@
     <ClCompile>
       <Optimization>Disabled</Optimization>
       <AdditionalIncludeDirectories>$(SolutionDir)..\OBSE;$(SolutionDir)..\OBSE\obse\;$(SolutionDir)..\OBSE\obse\obse;$(SolutionDir)..\OBSE\obse\obse_common;$(SolutionDir)..\OBSE\common;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;_USRDLL;OBLIVION_VERSION=0x010201A0;OBLIVION;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;_USRDLL;OBLIVION_VERSION=0x010201A0;OBLIVION;%(PreprocessorDefinitions);PDB_EXPORTS</PreprocessorDefinitions>
       <MinimalRebuild>false</MinimalRebuild>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
@@ -91,7 +91,7 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
       <AdditionalIncludeDirectories>$(SolutionDir)..\OBSE;$(SolutionDir)..\OBSE\obse\;$(SolutionDir)..\OBSE\obse\obse;$(SolutionDir)..\OBSE\obse\obse_common;$(SolutionDir)..\OBSE\common;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;_USRDLL;OBLIVION_VERSION=0x010201A0;OBLIVION;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;_USRDLL;OBLIVION_VERSION=0x010201A0;OBLIVION;%(PreprocessorDefinitions);PDB_EXPORTS</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
@@ -125,6 +125,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="CallTrace.cpp" />
+    <ClCompile Include="CrashLoggerAPI.cpp" />
     <ClCompile Include="Definitions.cpp" />
     <ClCompile Include="Device.cpp" />
     <ClCompile Include="dllmain.c">
@@ -137,6 +138,7 @@
     <ClCompile Include="Logging.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Memory.cpp" />
+    <ClCompile Include="MemoryProbe.cpp" />
     <ClCompile Include="Modules.cpp" />
     <ClCompile Include="PDB.cpp" />
     <ClCompile Include="RegistryStack.cpp" />
@@ -161,17 +163,26 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="SharedMem.cpp" />
+    <ClCompile Include="CLUtilities.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="CrashLogger.hpp" />
+    <ClInclude Include="CrashLoggerAPI.h" />
+    <ClInclude Include="Dereference.hpp" />
+    <ClInclude Include="Labels.hpp" />
+    <ClInclude Include="LabelsOBSE.h" />
+    <ClInclude Include="LogClassByLine.h" />
+    <ClInclude Include="MemoryProbe.hpp" />
     <ClInclude Include="PDB.h" />
     <ClInclude Include="Definitions.hpp" />
     <ClInclude Include="ExceptionHandler.hpp" />
     <ClInclude Include="Formatter.hpp" />
     <ClInclude Include="Logging.hpp" />
+    <ClInclude Include="RegistryStack.h" />
     <ClInclude Include="RTTI.hpp" />
     <ClInclude Include="SharedMem.h" />
-    <ClInclude Include="Utilities.hpp" />
+    <ClInclude Include="StackAPI.hpp" />
+    <ClInclude Include="CLUtilities.hpp" />
     <ClInclude Include="..\OBSE\obse\obse\GameActorValues.h" />
     <ClInclude Include="..\OBSE\obse\obse\GameAPI.h" />
     <ClInclude Include="..\OBSE\obse\obse\GameBSExtraData.h" />

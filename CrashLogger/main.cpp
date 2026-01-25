@@ -89,6 +89,8 @@ extern "C" {
       g_pluginHandle = obse->GetPluginHandle();
 
       if (!obse->isEditor){
+
+          MessageBoxA(NULL, "DLL attached", "CrashLogger", MB_OK);
           
           InitLog(GetCurPath());
           Inits();

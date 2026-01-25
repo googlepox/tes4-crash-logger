@@ -1,12 +1,13 @@
 #pragma once
-#include <IDebugLog.h>
-#include "Utilities.hpp"
+#include "CLUtilities.hpp"
 #include <format>
 #include <string>
 #include <chrono>
 #include <filesystem>
 #include <mutex>
 #include <vector>
+#include "Formatter.hpp"
+#include "Dereference.hpp"
 
 namespace CrashLogger::Playtime { inline void Init(); inline void Process(EXCEPTION_POINTERS* info); inline std::stringstream& Get(); }
 namespace CrashLogger::Exception { inline void Process(EXCEPTION_POINTERS* info); inline std::stringstream& Get(); }
@@ -25,121 +26,15 @@ namespace CrashLogger::Memory
 namespace CrashLogger::Device { inline void Process(EXCEPTION_POINTERS* info); inline std::stringstream& Get(); }
 namespace CrashLogger::GameData { inline void __fastcall Process(EXCEPTION_POINTERS* info); inline std::stringstream& Get(); }
 
-namespace CrashLogger::Stack
-{
-	inline std::string GetLineForObject(void** object, UInt32 depth);
-}
-
 namespace CrashLogger::PDB
 {
 	inline std::string GetModule(UInt32 eip, HANDLE process);
 	inline UInt32 GetModuleBase(UInt32 eip, HANDLE process);
 	inline std::string GetSymbol(UInt32 eip, HANDLE process);
 	inline std::string GetLine(UInt32 eip, HANDLE process);
-	inline std::string GetClassNameFromRTTIorPDB(void* object);
+	inline std::string GetClassNameFromRTTIorPDB(void* object, HANDLE hProcess);
 }
 
-namespace CrashLogger
-{
-
-	class SE_Exception
-	{
-	public:
-		SE_Exception() {}
-		~SE_Exception() {}
-	};
-
-	template<typename T>
-	class Dereference {
-		intptr_t pointer;
-		std::size_t size;
-
-	public:
-		Dereference(intptr_t pointer, std::size_t size) : pointer(pointer), size(size) {}
-
-		Dereference(intptr_t pointer) : pointer(pointer), size(sizeof(T)) {}
-		Dereference(const void* pointer) : pointer((intptr_t)pointer), size(sizeof(T)) {}
-
-		operator bool()
-		{
-			return IsValidPointer();
-		}
-
-		operator T* () {
-			if (IsValidPointer()) {
-				return reinterpret_cast<T*>(pointer);
-			}
-			return nullptr;
-
-			//throw std::runtime_error("Bad dereference");
-		}
-
-		T* operator->() {
-			if (IsValidPointer()) {
-				return reinterpret_cast<T*>(pointer);
-			}
-			return nullptr;
-			//throw std::runtime_error("Bad dereference");
-		}
-
-	private:
-		bool IsValidAddress() const
-		{
-			MEMORY_BASIC_INFORMATION mbi;
-			if (::VirtualQuery((void*)pointer, &mbi, sizeof(mbi)))
-			{
-				if (mbi.State != MEM_COMMIT) return false;
-
-				DWORD mask = (PAGE_READONLY | PAGE_READWRITE | PAGE_WRITECOPY | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY);
-				if ((mbi.Protect & mask) == 0) return false;
-
-				if (mbi.Protect & PAGE_GUARD) return false;
-				if (mbi.Protect & PAGE_NOACCESS) return false;
-
-				if (size_t(mbi.RegionSize) < size) return false;
-
-				return true;
-			}
-			return false;
-		}
-
-		bool AttemptDereference() const
-			try {
-			// Attempt to read the address as a UInt32
-			volatile UInt32 temp = *reinterpret_cast<const volatile UInt32*>(pointer);
-			return true;
-		}
-		catch (...) {
-			return false;
-		}
-
-		bool IsVtableValid() const
-		{
-			//			if (vtables_.find(vtable) == vtables_.end()) return false;
-
-			UInt32 vtable = *reinterpret_cast<UInt32*>(pointer);
-			if (vtable > 0xA283D0 && vtable < 0xAB0000)
-				return true;
-
-			return false;
-		}
-
-		bool IsValidPointer() const
-			try {
-			if (!IsValidAddress()) return false;
-
-			if (!AttemptDereference()) return false;
-
-			if (!IsVtableValid()) return false;
-
-			return true;
-		}
-		catch (...)
-		{
-			return false;
-		}
-	};
-}
 
 namespace CrashLogger::Labels
 {
@@ -197,20 +92,20 @@ namespace CrashLogger::Labels
 			__try {
 				return *static_cast<UInt32*>(ptr) >= address && *static_cast<UInt32*>(ptr) <= address + size;
 			}
-			__except (ExceptionFilter(GetExceptionCode()))
+			__except (CrashLoggerExceptionFilter(GetExceptionCode()))
 			{
 				return false;
 			}
 		}
 
-		static std::string GetTypeName(void* ptr)
+		static std::string GetTypeName(void* ptr, HANDLE hProcess)
 		{
-			return PDB::GetClassNameFromRTTIorPDB(ptr);
+			return PDB::GetClassNameFromRTTIorPDB(ptr, hProcess);
 		}
 
 		virtual std::string GetLabelName() const { return "None"; }
 
-		virtual std::string GetName(void* object) const { return name; }
+		virtual std::string GetName(void* object, HANDLE hProcess) const { return name; }
 
 		virtual std::string GetDescription(void* object) const
 		{
@@ -226,7 +121,7 @@ namespace CrashLogger::Labels
 
 		std::string GetLabelName() const override { return "Class"; }
 
-		std::string GetName(void* object) const override { return name.empty() ? GetTypeName(object) : name; }
+		std::string GetName(void* object, HANDLE hProcess) const override { return name.empty() ? GetTypeName(object, hProcess) : name; }
 	};
 
 	class LabelGlobal : public Label
@@ -247,10 +142,14 @@ namespace CrashLogger::Labels
 		Label::GetAll().push_back(std::make_unique<LabelType>(std::forward<_Types>(args)...));
 	}
 
+#ifdef CRASHLOGGER_INCLUDE_OBSE
 	void FillOBSELabels();
+#endif
 
 	inline void FillLabels()
 	{
+#ifdef CRASHLOGGER_INCLUDE_OBSE
 		FillOBSELabels();
+#endif
 	}
 }

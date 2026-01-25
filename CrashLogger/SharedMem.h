@@ -12,8 +12,9 @@ struct AllocEvent
     void* ptr;
     uint32_t size;
     uint32_t caller;
-    uint8_t type; // 0 = alloc, 1 = free
+    uint8_t type;
     uint8_t _pad[3];
+    char objectType[64];
 };
 
 struct SharedMemHeader
@@ -21,9 +22,6 @@ struct SharedMemHeader
     uint32_t magic;
     std::atomic<uint32_t> writeIdx;
     std::atomic<uint32_t> readIdx;
-    std::atomic<uint32_t> alive;
-    std::atomic<uint32_t> lastHeartbeat;
-    std::atomic<uint32_t> debugCounter;
 };
 
 struct SharedMemBuffer

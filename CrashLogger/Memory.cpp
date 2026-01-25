@@ -115,13 +115,21 @@ namespace CrashLogger::Memory
 		ThreadLog* tlog = GetThreadLog();
 		if (!tlog) return;
 
+		if (size < 64)
+			return;
+
+		static thread_local uint32_t sample = 0;
+		if ((sample++ & 0x7) != 0)
+			return;
+
 		uint32_t idx = tlog->writeIndex.load(std::memory_order_relaxed);
 		uint32_t slot = idx % THREAD_BUF_SZ;
 
 		tlog->buf[slot].ptr = ptr;
 		tlog->buf[slot].size = size;
 		tlog->buf[slot].caller = caller;
-		tlog->buf[slot].type = 0; // alloc
+		tlog->buf[slot].type = 0;
+		
 
 		tlog->writeIndex.store(idx + 1, std::memory_order_release);
 	}
@@ -181,18 +189,12 @@ namespace CrashLogger::Memory
 	// Hook functions
 	void* __cdecl Hooked_FormHeapAlloc(size_t size)
 	{
-		if (g_shm)
-		{
-			g_shm->header.debugCounter.fetch_add(1, std::memory_order_relaxed);
-			g_shm->header.lastHeartbeat.store(GetTickCount64(), std::memory_order_relaxed);
-		}
 
 		uint32_t caller = reinterpret_cast<uint32_t>(_ReturnAddress());
 		void* result = g_origAlloc(size);
 
 		if (!result) return nullptr;
 
-		// Record allocation event if profiling is active
 		if (g_profilingEnabled.load(std::memory_order_acquire))
 		{
 			RecordAlloc(caller, static_cast<uint32_t>(size), result);
@@ -262,114 +264,6 @@ namespace CrashLogger::Memory
 		return PatchJump(TARGET_FREE, PATCH_SIZE, &Hooked_FormHeapFree);
 	}
 
-	// Helper to determine appropriate depth based on caller
-	UInt32 GetDepthForCaller(const std::string& callerSymbol)
-	{
-		// Buffer/array allocations - no vtable
-		if (callerSymbol.find("Buffer") != std::string::npos ||
-			callerSymbol.find("Array") != std::string::npos ||
-			callerSymbol.find("Insert") != std::string::npos)
-		{
-			return 0;  // Skip resolution, these are raw buffers
-		}
-
-		// NiGeometryData_ReadBinary allocates vertex/normal/UV buffers (raw floats/vectors)
-		if (callerSymbol.find("NiGeometryData_ReadBinary") != std::string::npos)
-		{
-			return 0;  // Raw geometry data, no vtable
-		}
-
-		// Direct object allocations - vtable is at offset 0
-		if (callerSymbol.find("new") != std::string::npos ||
-			callerSymbol.find("CreateCopy") != std::string::npos ||
-			callerSymbol.find("ReadBinary") != std::string::npos)
-		{
-			return 1;  // Allocated object has vtable at ptr[0]
-		}
-
-		// ExtraData allocations - usually pointer to object
-		if (callerSymbol.find("Extra") != std::string::npos)
-		{
-			return 2;
-		}
-
-		// Default: try shallow first
-		return 2;
-	}
-
-	// Safe wrapper that won't crash on invalid pointers
-	std::string SafeGetLineForObject(void* ptr, UInt32 depth)
-	{
-		if (!ptr) return "<null>";
-
-		// Check if memory is readable before dereferencing
-		MEMORY_BASIC_INFORMATION mbi;
-		if (VirtualQuery(ptr, &mbi, sizeof(mbi)) == 0)
-		{
-			return "<invalid memory>";
-		}
-
-		if (!(mbi.State & MEM_COMMIT) ||
-			!(mbi.Protect & (PAGE_READONLY | PAGE_READWRITE | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE)))
-		{
-			return "<inaccessible memory>";
-		}
-
-		void* ptrCopy = ptr;  // Make non-const copy
-		void** objectPtr = &ptrCopy;
-		std::string result = Stack::GetLineForObject(objectPtr, depth);
-		return result.empty() ? "<unresolved>" : result;
-	};
-
-	// Get module name from address (faster and more reliable than full symbol resolution)
-	std::string GetModuleFromAddress(uint32_t address, HANDLE hProcess)
-	{
-		HMODULE hMods[1024];
-		DWORD cbNeeded;
-
-		if (EnumProcessModules(hProcess, hMods, sizeof(hMods), &cbNeeded))
-		{
-			for (unsigned int i = 0; i < (cbNeeded / sizeof(HMODULE)); i++)
-			{
-				MODULEINFO modInfo;
-				if (GetModuleInformation(hProcess, hMods[i], &modInfo, sizeof(modInfo)))
-				{
-					uintptr_t base = reinterpret_cast<uintptr_t>(modInfo.lpBaseOfDll);
-					uintptr_t end = base + modInfo.SizeOfImage;
-
-					if (address >= base && address < end)
-					{
-						char modName[MAX_PATH];
-						if (GetModuleBaseName(hProcess, hMods[i], modName, sizeof(modName)))
-						{
-							return std::format("{}+0x{:X}", modName, address - base);
-						}
-					}
-				}
-			}
-		}
-		return std::format("0x{:08X}", address);
-	}
-
-	// Safe symbol resolution - try module name first, fall back to PDB if needed
-	std::string SafeGetSymbol(uint32_t addr, HANDLE hProcess, bool tryFullSymbols)
-	{
-		// Always get module info (fast and reliable)
-		std::string moduleInfo = GetModuleFromAddress(addr, hProcess);
-
-		// Only try full symbol resolution if explicitly requested and enabled
-		if (tryFullSymbols)
-		{
-			std::string sym = PDB::GetSymbol(addr, hProcess);
-			if (!sym.empty())
-			{
-				return sym;
-			}
-		}
-
-		return moduleInfo;
-	}
-
 	void TickMemoryProfiler()
 	{
 		if (!g_profilingEnabled.load(std::memory_order_acquire))
@@ -386,7 +280,7 @@ namespace CrashLogger::Memory
 	{
 		while (g_profilingStarted.load(std::memory_order_acquire))
 		{
-			g_shm->header.alive.fetch_add(1, std::memory_order_release); // heartbeat
+			//g_shm->header.alive.fetch_add(1, std::memory_order_release); // heartbeat
 
 			TickMemoryProfiler();
 			std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -398,8 +292,7 @@ namespace CrashLogger::Memory
 	{
 		g_profilingEnabled.store(true, std::memory_order_release);
 		g_profilingStarted.store(true, std::memory_order_release);
-		g_memoryProfilerThread = std::thread(MemoryProfilerThread);
-		g_memoryProfilerThread.detach();
+		//g_memoryProfilerThread.detach();
 	}
 
 	void LaunchHelper()

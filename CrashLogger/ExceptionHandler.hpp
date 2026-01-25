@@ -3,6 +3,7 @@
 #include "Logging.hpp"
 #include <signal.h>
 #include "SharedMem.h"
+#include "Dereference.hpp"
 
 #define SYMOPT_EX_WINE_NATIVE_MODULES 1000
 
@@ -153,6 +154,7 @@ namespace CrashLogger
 		_MESSAGE("%s", Memory::Get().str().c_str());
 		_MESSAGE("================================\n");
 		LogGameData(info);
+		_MESSAGE("================================\n");
 		//_MESSAGE("================================\n");
 		//_MESSAGE("================================");
 		//_MESSAGE("%s", Mods::Get().str());

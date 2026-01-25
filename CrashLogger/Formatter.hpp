@@ -1,3 +1,4 @@
+#pragma once
 #include <format>
 #include <set>
 #include "GameObjects.h"
@@ -6,6 +7,7 @@
 #include "Script.h"
 #include "GameTasks.h"
 #include "NiExtraData.h"
+#include "CLUtilities.hpp"
 
 // If class is described by a single line, no need to name the variable
 // If there is a member class, if it's one-line, leave it as one-line, if there are several, prepend the name and add offset
