@@ -38,6 +38,7 @@ namespace CrashLogger::Stack
             if (!(mbi.Protect & (PAGE_EXECUTE_READ | PAGE_READONLY)))
                 return false;
 
+            // Now try to get RTTI
 			if (auto name = PDB::GetClassNameFromRTTIorPDB((void*)object, hProcess); !name.empty())
 			{
 				if (name.find('+') != std::string::npos)

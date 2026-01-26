@@ -67,7 +67,7 @@ namespace CrashLogger::Memory
 		const float used = float(g_formHeap->field_014);
 		const float total = float(g_formHeap->field_00C);
 
-		return (used / total) >= 0;
+		return (used / total) >= HEAP_PANIC;
 	}
 
 	// Helper to find/claim a slot for this thread

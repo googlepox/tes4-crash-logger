@@ -39,3 +39,6 @@
 /OBSE
 /xOBSE
 /common
+/CrashLoggerHelper/Release
+*.tlog
+CrashLoggerHelper/Release/vc143.pdb

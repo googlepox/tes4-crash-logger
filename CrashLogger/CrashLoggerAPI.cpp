@@ -149,7 +149,7 @@ namespace CrashLogger
             return out;
 
         std::string label, name, desc;
-        LOG("GetStringForClassLabel");
+        //LOG("GetStringForClassLabel");
         if (GetStringForClassLabel(object, label, name, desc, hProcess))
         {
             out.kind = ResolveKind::Label;
@@ -159,7 +159,7 @@ namespace CrashLogger
             return out;
         }
 
-        LOG("GetClassNameFromRTTIorPDB");
+        //LOG("GetClassNameFromRTTIorPDB");
         if (const auto rtti = PDB::GetClassNameFromRTTIorPDB(object, hProcess);
             !rtti.empty())
         {
@@ -169,7 +169,7 @@ namespace CrashLogger
             return out;
         }
 
-        LOG("GetAsString");
+        //LOG("GetAsString");
         if (GetAsString(hProcess, object, label, desc))
         {
             out.kind = ResolveKind::String;

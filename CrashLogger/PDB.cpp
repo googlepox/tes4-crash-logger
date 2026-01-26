@@ -85,57 +85,6 @@ namespace CrashLogger::PDB
         return size <= mbi.RegionSize;
     }
 
-
-    static std::string GetObjectClassNameSafe(void* objBase, HANDLE process) noexcept
-    {
-        if (!objBase || !process)
-            return {};
-
-        // Read vtable pointer from object
-        if (!IsReadable(process, objBase, sizeof(void*)))
-            return {};
-
-        void** vtbl = *reinterpret_cast<void***>(objBase);
-        if (!vtbl)
-            return {};
-
-        // RTTI usually at vtbl[-1]
-        if (!IsReadable(process, vtbl - 1, sizeof(void*)))
-            return {};
-
-        void* colPtr = vtbl[-1];
-        if (!colPtr)
-            return {};
-
-        if (!IsReadable(process, colPtr, sizeof(RTTILocator)))
-            return {};
-
-        auto* rtti = static_cast<RTTILocator*>(colPtr);
-        if (!rtti->type || !IsReadable(process, rtti->type, sizeof(RTTIType)))
-            return {};
-
-        RTTIType* type = rtti->type;
-
-        // Check name pointer
-        if (!IsReadable(process, type->name, 4))
-            return {};
-
-        if (type->name[0] != '.' || type->name[1] != '?')
-            return {};
-
-        // Ensure null-terminated within MAX_PATH
-        for (UInt32 i = 0; i < MAX_PATH; i++)
-        {
-            if (!IsReadable(process, &type->name[i], 1))
-                return {};
-
-            if (type->name[i] == '\0')
-                return std::string(type->name);
-        }
-
-        return {};
-    }
-
     std::string GetObjectClassNameInternal2(void* objBase, HANDLE hProcess)
     {
         try
@@ -171,27 +120,196 @@ namespace CrashLogger::PDB
         }
     }
 
+    struct RTTITypePrefix
+    {
+        void* typeInfo;
+        UInt32 pad;
+    };
+
+    // Unified function: local fast path + remote safe path
+    std::string GetObjectClassNameImpl(void* objBase, HANDLE process) 
+    {
+        if (!objBase)
+            return {};
+
+        if (logFile)
+        {
+            //LOG("inside GetObjectClassNameImpl");
+        }
+        HANDLE effective = process ? process : GetCurrentProcess();
+        if (effective == GetCurrentProcess())
+        {
+
+            std::string result = GetObjectClassNameInternal2(objBase, effective);
+            const char* decorated = result.c_str();
+            if (!decorated || decorated[0] == '\0')
+                return {};
+
+            // Basic sanity for RTTI strings
+            if (decorated[0] != '.' || decorated[1] != '?')
+                return {};
+
+            return std::string(decorated);
+        }
+        if (logFile)
+        {
+            //LOG("asd");
+        }
+
+        auto addr = reinterpret_cast<std::uintptr_t>(objBase);
+        if ((addr & 0x3) != 0)
+            return {};
+        if (logFile)
+        {
+            //LOG("fgh");
+        }
+        MEMORY_BASIC_INFORMATION mbi{};
+        // 1) Ensure object itself is readable in remote process
+        if (!VirtualQueryEx(effective, objBase, &mbi, sizeof(mbi)))
+            return {};
+        if (mbi.State != MEM_COMMIT)
+            return {};
+        if (mbi.Protect & (PAGE_NOACCESS | PAGE_GUARD))
+            return {};
+        if (mbi.RegionSize < sizeof(void*))
+            return {};
+        // 2) Read vtable pointer from remote object: [objBase] -> vtblRemote
+        void* vtblRemote = nullptr;
+        SIZE_T bytesRead = 0;
+        if (!ReadProcessMemory(effective, objBase, &vtblRemote, sizeof(vtblRemote), &bytesRead) ||
+            bytesRead != sizeof(vtblRemote) ||
+            !vtblRemote)
+        {
+            return {};
+        }
+        if (!VirtualQueryEx(effective, vtblRemote, &mbi, sizeof(mbi)))
+            return {};
+        if (mbi.State != MEM_COMMIT)
+            return {};
+        if (mbi.Protect & (PAGE_NOACCESS | PAGE_GUARD))
+            return {};
+        void* locatorRemote = nullptr;
+        void* locatorSlotRemote =
+            static_cast<void*>(static_cast<std::uint8_t*>(vtblRemote) - sizeof(void*));
+        if (!VirtualQueryEx(effective, locatorSlotRemote, &mbi, sizeof(mbi)))
+            return {};
+        if (mbi.State != MEM_COMMIT)
+            return {};
+        if (mbi.Protect & (PAGE_NOACCESS | PAGE_GUARD))
+            return {};
+        if (mbi.RegionSize < sizeof(void*))
+            return {};
+
+        bytesRead = 0;
+        if (!ReadProcessMemory(effective, locatorSlotRemote,
+            &locatorRemote, sizeof(locatorRemote), &bytesRead) ||
+            bytesRead != sizeof(locatorRemote) ||
+            !locatorRemote)
+        {
+            return {};
+        }
+
+        RTTILocator locator{};
+        if (!VirtualQueryEx(effective, locatorRemote, &mbi, sizeof(mbi)))
+            return {};
+        if (mbi.State != MEM_COMMIT)
+            return {};
+        if (mbi.Protect & (PAGE_NOACCESS | PAGE_GUARD))
+            return {};
+        if (mbi.RegionSize < sizeof(locator))
+            return {};
+
+        bytesRead = 0;
+        if (!ReadProcessMemory(effective, locatorRemote,
+            &locator, sizeof(locator), &bytesRead) ||
+            bytesRead != sizeof(locator))
+        {
+            return {};
+        }
+
+        if (!locator.type)
+            return {};
+
+        RTTITypePrefix typePrefix{};
+        if (!VirtualQueryEx(effective, locator.type, &mbi, sizeof(mbi)))
+            return {};
+        if (mbi.State != MEM_COMMIT)
+            return {};
+        if (mbi.Protect & (PAGE_NOACCESS | PAGE_GUARD))
+            return {};
+        if (mbi.RegionSize < sizeof(RTTITypePrefix))
+            return {};
+
+        bytesRead = 0;
+        if (!ReadProcessMemory(effective, locator.type,
+            &typePrefix, sizeof(typePrefix), &bytesRead) ||
+            bytesRead != sizeof(typePrefix))
+        {
+            return {};
+        }
+        constexpr SIZE_T nameOffset = sizeof(RTTITypePrefix);
+        std::uintptr_t nameRemoteAddr =
+            reinterpret_cast<std::uintptr_t>(locator.type) + nameOffset;
+
+        char nameBuf[MAX_PATH]{};
+
+        if (!VirtualQueryEx(effective, reinterpret_cast<void*>(nameRemoteAddr), &mbi, sizeof(mbi)))
+            return {};
+        if (mbi.State != MEM_COMMIT)
+            return {};
+        if (mbi.Protect & (PAGE_NOACCESS | PAGE_GUARD))
+            return {};
+
+        SIZE_T toRead = (mbi.RegionSize < MAX_PATH) ? mbi.RegionSize : MAX_PATH;
+        bytesRead = 0;
+
+        if (!ReadProcessMemory(effective,
+            reinterpret_cast<void*>(nameRemoteAddr),
+            nameBuf,
+            toRead,
+            &bytesRead) ||
+            bytesRead == 0)
+        {
+            return {};
+        }
+
+        nameBuf[MAX_PATH - 1] = '\0';
+        if (nameBuf[0] != '.' || nameBuf[1] != '?')
+            return {};
+
+        size_t len = strnlen(nameBuf, MAX_PATH);
+        if (len == 0 || len == MAX_PATH)
+            return {};
+
+        return std::string(nameBuf, len);
+    }
+
 
     std::string GetClassNameFromRTTI(void* object, HANDLE process) noexcept
     {
-        _MESSAGE("rtti1");
+        const char* emptyStr = "";
 
-        if (!object || !process)
-            return {};
+        std::string decorated;
+        if (logFile)
+        {
+            //LOG("About to call function");
+        }
 
-        std::string decorated = GetObjectClassNameSafe(object, process);
+        try
+        {
+            decorated = GetObjectClassNameImpl(object, process);
+        }
+        catch (...)
+        {
+        }
 
-        _MESSAGE("rtti2: decorated='%s'", decorated.c_str());
         if (decorated.empty())
             return {};
 
         if (decorated.size() < 2 || decorated[0] != '.' || decorated[1] != '?')
         {
-            _MESSAGE("rtti3: bad decorated prefix");
             return {};
         }
-
-        _MESSAGE("rtti4: undecorating");
 
         char tempBuffer[MAX_PATH]{};
 
@@ -204,15 +322,12 @@ namespace CrashLogger::PDB
 
         tempBuffer[MAX_PATH - 1] = '\0';
 
-        _MESSAGE("rtti5: undecorated buffer='%s' ok=%d", tempBuffer, ok);
-
         if (!ok)
             return {};
 
         size_t safeLen = strnlen(tempBuffer, MAX_PATH);
         if (safeLen == MAX_PATH)
         {
-            _MESSAGE("rttiX: undecorated NOT null-terminated (invalid RTTI)");
             return {};
         }
 
@@ -220,11 +335,9 @@ namespace CrashLogger::PDB
 
         if (undec.size() > 200)
         {
-            _MESSAGE("rttiX: undecorated suspiciously large");
             return {};
         }
 
-        // Strip "class " only if present
         constexpr std::string_view classPrefix = "class ";
 
         if (undec.rfind(classPrefix, 0) == 0 &&
@@ -239,43 +352,76 @@ namespace CrashLogger::PDB
 
     std::string GetClassNameFromPDB(void* object, HANDLE process) noexcept
     {
-        if (!object || !process)
+        if (!object)
             return {};
-        _MESSAGE("pdb1");
-        // Make sure reading 4 bytes at object is safe
-        if (!IsReadable(process, object, sizeof(UInt32)))
-            return {};
-        _MESSAGE("pdb2");
+
+        // Normalize the handle
+        HANDLE effective = process ? process : GetCurrentProcess();
+
         UInt32 addr = 0;
-        std::memcpy(&addr, object, sizeof(addr));  // avoids UB, respects readability check
-        _MESSAGE("pdb3");
+
+        if (effective == GetCurrentProcess())
+        {
+            // In-process: object is a real pointer in *this* module
+            if (!IsReadable(effective, object, sizeof(addr)))
+                return {};
+
+            // Safe-ish to deref directly
+            std::memcpy(&addr, object, sizeof(addr));
+        }
+        else
+        {
+            // Remote process: NEVER deref directly – always use RPM
+            SIZE_T bytesRead = 0;
+            if (!ReadProcessMemory(effective,
+                object,
+                &addr,
+                sizeof(addr),
+                &bytesRead) ||
+                bytesRead != sizeof(addr))
+            {
+                return {};
+            }
+        }
+
         if (!addr)
             return {};
-        _MESSAGE("pdb4");
-        std::string sym = GetSymbol(addr, process);
+
+        std::string sym = GetSymbol(addr, effective);
         if (sym.empty())
             return {};
-        _MESSAGE("pdb5");
+
         // "Name+0x1234" -> "Name"
         if (auto plusPos = sym.find('+'); plusPos != std::string::npos)
             sym = sym.substr(0, plusPos);
-        _MESSAGE("pdb6");
+
         // "Foo::Bar::`vftable'" -> "Foo::Bar"
         if (auto vftPos = sym.find("::`vftable'"); vftPos != std::string::npos)
             sym = sym.substr(0, vftPos);
-        _MESSAGE("pdb7");
+
         return sym;
     }
 
 
     std::string GetClassNameFromRTTIorPDB(void* object, HANDLE process) noexcept
     {
+        if (logFile)
+        {
+            //LOG("1");
+        }
         if (!object || !process)
             return {};
-
+        if (logFile)
+        {
+            //LOG("2");
+        }
         if (auto rtti = GetClassNameFromRTTI(object, process); !rtti.empty())
             return rtti;
 
+        if (logFile)
+        {
+            //LOG("3");
+        }
         return GetClassNameFromPDB(object, process);
     }
 }
