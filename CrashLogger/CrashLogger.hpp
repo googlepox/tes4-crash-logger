@@ -8,6 +8,7 @@
 #include <vector>
 #include "Formatter.hpp"
 #include "Dereference.hpp"
+#include "PDB.h"
 
 namespace CrashLogger::Playtime { inline void Init(); inline void Process(EXCEPTION_POINTERS* info); inline std::stringstream& Get(); }
 namespace CrashLogger::Exception { inline void Process(EXCEPTION_POINTERS* info); inline std::stringstream& Get(); }
@@ -25,15 +26,6 @@ namespace CrashLogger::Memory
 //namespace CrashLogger::Mods { inline void Process(EXCEPTION_POINTERS* info); inline std::stringstream& Get(); }
 namespace CrashLogger::Device { inline void Process(EXCEPTION_POINTERS* info); inline std::stringstream& Get(); }
 namespace CrashLogger::GameData { inline void __fastcall Process(EXCEPTION_POINTERS* info); inline std::stringstream& Get(); }
-
-namespace CrashLogger::PDB
-{
-	inline std::string GetModule(UInt32 eip, HANDLE process);
-	inline UInt32 GetModuleBase(UInt32 eip, HANDLE process);
-	inline std::string GetSymbol(UInt32 eip, HANDLE process);
-	inline std::string GetLine(UInt32 eip, HANDLE process);
-	inline std::string GetClassNameFromRTTIorPDB(void* object, HANDLE hProcess);
-}
 
 
 namespace CrashLogger::Labels
@@ -100,7 +92,7 @@ namespace CrashLogger::Labels
 
 		static std::string GetTypeName(void* ptr, HANDLE hProcess)
 		{
-			return PDB::GetClassNameFromRTTIorPDB(ptr, hProcess);
+			return CrashLogger::PDB::GetClassNameFromRTTIorPDB(ptr, hProcess);
 		}
 
 		virtual std::string GetLabelName() const { return "None"; }

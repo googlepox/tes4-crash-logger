@@ -21,6 +21,8 @@
 #pragma comment(lib, "Psapi.lib")
 #pragma comment(lib, "DbgHelp.lib")
 
+//#pragma comment(linker, "/SUBSYSTEM:WINDOWS")
+
 HANDLE hOblivionProcess = nullptr;
 
 uint32_t GetDepthForCaller(const std::string& callerSymbol)
@@ -81,27 +83,6 @@ std::string GetModuleFromAddress(uint32_t address, HANDLE hProcess)
     return std::format("0x{:08X}", address);
 }
 
-std::string SafeGetLineForObject(void* ptr, UInt32 depth)
-{
-    if (!ptr) return "<null>";
-
-    MEMORY_BASIC_INFORMATION mbi;
-    if (VirtualQuery(ptr, &mbi, sizeof(mbi)) == 0)
-    {
-        return "<invalid memory>";
-    }
-
-    if (!(mbi.State & MEM_COMMIT) ||
-        !(mbi.Protect & (PAGE_READONLY | PAGE_READWRITE | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE)))
-    {
-        return "<inaccessible memory>";
-    }
-    void* ptrCopy = ptr;
-    void** objectPtr = &ptrCopy;
-    std::string result = CrashLogger::ResolveObject(objectPtr, hOblivionProcess).name;
-    return result.empty() ? "<unresolved>" : result;
-};
-
 std::string SafeGetSymbol(uint32_t addr, HANDLE hProcess, bool tryFullSymbols)
 {
     std::string moduleInfo = GetModuleFromAddress(addr, hProcess);
@@ -134,11 +115,11 @@ CrashLogger::ResolveResult ResolveObjectSafe(void* object)
     return CrashLogger::ResolveObject(object, hOblivionProcess);
 }
 
-std::string SafeGetLineForObjectRemote(void* ptr, HANDLE hProcess)
+// Inner implementation – keep your real logic here.
+static std::string SafeGetLineForObjectRemoteImpl(void* ptr, HANDLE hProcess)
 {
     if (!ptr) return "<null>";
 
-    // Check if memory is accessible in remote process
     MEMORY_BASIC_INFORMATION mbi{};
     if (!VirtualQueryEx(hProcess, ptr, &mbi, sizeof(mbi)))
     {
@@ -149,7 +130,6 @@ std::string SafeGetLineForObjectRemote(void* ptr, HANDLE hProcess)
     if (mbi.State != MEM_COMMIT)
         return std::format("<not commit: {}>", mbi.State);
 
-    // Read the first 64 bytes to analyze the data
     unsigned char buffer[64] = {};
     SIZE_T bytesRead = 0;
     if (!ReadProcessMemory(hProcess, ptr, buffer, sizeof(buffer), &bytesRead))
@@ -163,12 +143,12 @@ std::string SafeGetLineForObjectRemote(void* ptr, HANDLE hProcess)
     if (!vtablePtr)
         return "<zeroed>";
 
-    // Check if this looks like a valid vtable pointer
+    // Try to treat first dword as pointer / vtable
     if (!VirtualQueryEx(hProcess, vtablePtr, &mbi, sizeof(mbi)))
     {
-        // Not a valid pointer - try to identify what it is
+        // --- non-vtable heuristics ---
 
-        // Check if it looks like a string (printable ASCII)
+        // String-ish?
         bool isPrintable = true;
         int printableCount = 0;
         for (size_t i = 0; i < bytesRead && buffer[i] != 0; ++i)
@@ -185,7 +165,7 @@ std::string SafeGetLineForObjectRemote(void* ptr, HANDLE hProcess)
         if (isPrintable && printableCount > 3)
             return "<string data>";
 
-        // Check if it's all zeros
+        // All zeros?
         bool allZeros = true;
         for (size_t i = 0; i < bytesRead; ++i)
         {
@@ -198,7 +178,7 @@ std::string SafeGetLineForObjectRemote(void* ptr, HANDLE hProcess)
         if (allZeros)
             return "<zero buffer>";
 
-        // Check if it looks like numeric data
+        // Mostly small numbers?
         int smallValueCount = 0;
         for (size_t i = 0; i < bytesRead; ++i)
         {
@@ -211,75 +191,70 @@ std::string SafeGetLineForObjectRemote(void* ptr, HANDLE hProcess)
         return "<raw buffer>";
     }
 
-    // Get module for the pointer target
     std::string targetModule = GetModuleFromAddress((uint32_t)vtablePtr, hProcess);
-
-    // Check memory protection of target
     bool isExecutable = (mbi.Protect & (PAGE_EXECUTE | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE));
     bool isReadOnly = (mbi.Protect & PAGE_READONLY);
 
     if (!isExecutable && !isReadOnly)
     {
-        // Points to writable memory - likely another structure or heap data
         if (targetModule.find("Oblivion.exe") != std::string::npos)
             return std::format("<ptr->heap @{}>", targetModule);
         return "<struct/pointer>";
     }
 
-    // It's in read-only or executable memory - could be vtable or const data
-
-    // Try to resolve symbol
     std::string sym = SafeGetSymbol((uint32_t)vtablePtr, hProcess, true);
 
-    // Extract class name from vtable symbol
     size_t vftablePos = sym.find("::`vftable");
     if (vftablePos != std::string::npos)
-    {
         return sym.substr(0, vftablePos);
-    }
 
     size_t rttiPos = sym.find("::`RTTI");
     if (rttiPos != std::string::npos)
-    {
         return sym.substr(0, rttiPos);
-    }
 
-    // Check if it's const string data
     if (sym.find("string") != std::string::npos || sym.find("str") != std::string::npos)
         return std::format("<const str @{}>", targetModule);
 
-    // Has a symbol in read-only memory
-    if (!sym.empty() && sym.find("0x") != 0)
+    if (!sym.empty() && sym.rfind("0x", 0) != 0) // doesn't start with "0x"
     {
-        // Truncate long symbols
         if (sym.length() > 30)
             sym = sym.substr(0, 27) + "...";
         return std::format("<ro->{}", sym);
     }
 
-    // Points to read-only data but no clear symbol
+    if (targetModule.empty())
+        return "<no module>";
+
     if (targetModule.find("Oblivion.exe") == std::string::npos)
-        return std::format("<external @{}>", targetModule.substr(0, targetModule.find('+')));
+    {
+        auto plusPos = targetModule.find('+');
+        std::string base = (plusPos == std::string::npos)
+            ? targetModule
+            : targetModule.substr(0, plusPos);
+        return std::format("<external @{}>", base);
+    }
 
     return std::format("<data @{}>", targetModule);
 }
 
-FILE* logFile = nullptr;
+std::string SafeGetLineForObjectRemote(void* ptr, HANDLE hProcess)
+{
+    std::string res = SafeGetLineForObjectRemoteImpl(ptr, hProcess);
 
-#define LOG(fmt, ...) do { \
-    fprintf(logFile, fmt "\n", ##__VA_ARGS__); \
-    fflush(logFile); \
-    printf(fmt "\n", ##__VA_ARGS__); \
-    fflush(stdout); \
-} while(0)
+    if (res.empty())
+    {
+        res = "<unclassified>";
+    }
+
+    return res;
+}
 
 LONG WINAPI HelperUnhandledExceptionFilter(EXCEPTION_POINTERS* exceptionInfo)
 {
-    LOG("\n\n=== UNHANDLED EXCEPTION ===\n");
-    LOG("Exception Code: 0x%08X\n", exceptionInfo->ExceptionRecord->ExceptionCode);
-    LOG("Exception Address: 0x%p\n", exceptionInfo->ExceptionRecord->ExceptionAddress);
-    LOG("Press Enter to exit...\n");
-    getchar();
+    //LOG("\n\n=== UNHANDLED EXCEPTION ===\n");
+    //LOG("Exception Code: 0x%08X\n", exceptionInfo->ExceptionRecord->ExceptionCode);
+    //LOG("Exception Address: 0x%p\n", exceptionInfo->ExceptionRecord->ExceptionAddress);
+    //LOG("Press Enter to exit...\n");
     return EXCEPTION_EXECUTE_HANDLER;
 }
 
@@ -290,7 +265,7 @@ void MonitorLoop(std::ofstream& out, HANDLE hProcess, bool symbolsAvailable)
     {
         uint32_t caller;
         uint32_t size;
-        char objectType[64];
+        std::string objectType;
     };
 
     struct LiveAlloc
@@ -298,13 +273,14 @@ void MonitorLoop(std::ofstream& out, HANDLE hProcess, bool symbolsAvailable)
         void* ptr;
         uint32_t size;
         uint32_t caller;
+        std::string objectType;
     };
 
     std::unordered_map<void*, AllocInfo> activeAllocs;
     std::unordered_map<uint32_t, uint32_t> churnCounts;
     std::vector<LiveAlloc> liveAllocs;
     liveAllocs.reserve(activeAllocs.size());
-    
+
     for (auto& [ptr, info] : activeAllocs)
     {
         liveAllocs.push_back({ ptr, info.size, info.caller });
@@ -314,44 +290,79 @@ void MonitorLoop(std::ofstream& out, HANDLE hProcess, bool symbolsAvailable)
         [](const LiveAlloc& a, const LiveAlloc& b) {
             return a.size > b.size;
         });
-    
 
     uint64_t totalActiveBytes = 0;
     uint32_t lastDumpTime = GetTickCount64();
     uint64_t eventsProcessed = 0;
 
-    LOG("\nMonitoring loop started...\n");
+    //LOG("\nMonitoring loop started...\n");
 
     for (;;)
     {
+
+        bool sawExit = false;
+        DWORD exitSeenAt = 0;
+
         DWORD exitCode = 0;
         if (!GetExitCodeProcess(hProcess, &exitCode) || exitCode != STILL_ACTIVE)
         {
-            LOG("Oblivion process has exited (exit code: %lu).\n", exitCode);
-            break;
+            sawExit = true;
         }
 
         uint32_t read = g_shm->header.readIdx.load(std::memory_order_acquire);
         uint32_t write = g_shm->header.writeIdx.load(std::memory_order_acquire);
+
+        if (sawExit)
+        {
+            g_shm->header.readIdx.store(read, std::memory_order_release);
+            break;
+        }
 
         if (read < write)
         {
             LOG("Processing events: %u -> %u (%u events)\n", read, write, write - read);
         }
 
+        int resolved = 0;
+        for (auto& [ptr, info] : activeAllocs)
+        {
+            if (!info.objectType.empty())
+                continue;
+
+            LOG("attempting to resolve");
+            auto res = CrashLogger::ResolveObject(ptr, hProcess);
+            LOG("resolve returned");
+            if (!res.name.empty())
+            {
+                info.objectType = res.name;
+                LOG("Resolved %s", info.objectType.c_str());
+                ++resolved;
+            }
+
+            if (resolved >= 1000) // safety cap if you want one
+                break;
+        }
+
+        if (resolved > 0)
+        {
+            LOG("Resolved %d object types before final dump", resolved);
+        }
+
         while (read < write)
         {
+
             uint32_t slot = read % SHM_CAPACITY;
             const AllocEvent& ev = g_shm->events[slot];
 
             eventsProcessed++;
 
-            if (ev.type == 0) // Allocation
+            if ((ev.sizeAndType & AE_TYPE_FREE) == 0) // Allocation
             {
                 if (ev.ptr != 0)
                 {
-                    activeAllocs[(void*)(uintptr_t)ev.ptr] = { ev.caller, ev.size };
-                    totalActiveBytes += ev.size;
+                    uint32_t size = (ev.sizeAndType & AE_SIZE_MASK);
+                    activeAllocs[(void*)(uintptr_t)ev.ptr] = { ev.caller, size };
+                    totalActiveBytes += size;
                     churnCounts[ev.caller]++;
                 }
             }
@@ -377,7 +388,7 @@ void MonitorLoop(std::ofstream& out, HANDLE hProcess, bool symbolsAvailable)
         uint32_t now = GetTickCount64();
         if (now - lastDumpTime >= 5000 && eventsProcessed > 0)
         {
-            LOG("Writing periodic dump... (events processed: %llu)\n", eventsProcessed);
+            //LOG("Writing periodic dump... (events processed: %llu)\n", eventsProcessed);
 
             out.seekp(0);
             out.clear();
@@ -390,14 +401,14 @@ void MonitorLoop(std::ofstream& out, HANDLE hProcess, bool symbolsAvailable)
 
             out.flush();
             lastDumpTime = now;
-            LOG("Periodic dump written.\n");
+            //LOG("Periodic dump written.\n");
         }
 
         Sleep(10);
     }
 
     // FINAL DUMP AFTER LOOP EXITS
-    LOG("Writing final dump... (events processed: %llu)\n", eventsProcessed);
+    //LOG("Writing final dump... (events processed: %llu)\n", eventsProcessed);
 
     out.seekp(0);
     out.clear();
@@ -425,7 +436,7 @@ void MonitorLoop(std::ofstream& out, HANDLE hProcess, bool symbolsAvailable)
         uint32_t count;
         uint32_t maxSize;
         void* samplePtr;
-        char objectType[64];
+        std::string type;
     };
 
     std::vector<CallerStat> stats;
@@ -448,7 +459,8 @@ void MonitorLoop(std::ofstream& out, HANDLE hProcess, bool symbolsAvailable)
             bytes,
             callerCounts[caller],
             callerMaxSize[caller],
-            samplePtr
+            samplePtr,
+            type 
         });
     }
 
@@ -474,8 +486,9 @@ void MonitorLoop(std::ofstream& out, HANDLE hProcess, bool symbolsAvailable)
     size_t displayCount = (std::min)(stats.size(), size_t(20));
     for (size_t i = 0; i < displayCount; ++i)
     {
+        LOG("active alloc resolve");
         std::string sym = SafeGetSymbol(stats[i].caller, hOblivionProcess, symbolsAvailable);
-        std::string sampleObject = CrashLogger::ResolveObject(stats[i].samplePtr, hOblivionProcess).name;
+        std::string sampleObject = stats[i].type;
         if (sampleObject.empty())
             sampleObject = SafeGetLineForObjectRemote(stats[i].samplePtr, hOblivionProcess);
 
@@ -490,18 +503,31 @@ void MonitorLoop(std::ofstream& out, HANDLE hProcess, bool symbolsAvailable)
     {
         out << std::format("... and {} more callers\n", stats.size() - 20);
     }
+
     out << "--------------------------------------------------------------------------------\n";
     out << "\n===== Largest Live Allocations (Top 50) =====\n";
     out << std::format("{:<10} {:>10} {:<50} {}\n",
         "Size", "Ptr", "Caller", "Object");
     out << "--------------------------------------------------------------------------------\n";
 
+    liveAllocs.reserve(activeAllocs.size());
+
+    for (auto& [ptr, info] : activeAllocs)
+    {
+        liveAllocs.push_back({ ptr, info.size, info.caller, info.objectType });
+    }
+
+    std::sort(liveAllocs.begin(), liveAllocs.end(),
+        [](const LiveAlloc& a, const LiveAlloc& b) {
+            return a.size > b.size;
+        });
+
     size_t max = std::min<size_t>(50, liveAllocs.size());
     for (size_t i = 0; i < max; ++i)
     {
         auto& a = liveAllocs[i];
         std::string sym = SafeGetSymbol(a.caller, hProcess, symbolsAvailable);
-        std::string obj = SafeGetLineForObjectRemote(a.ptr, hProcess);
+        std::string obj = liveAllocs[i].objectType;
 
         out << std::format("{:<10} 0x{:08X} {:<50} {}\n",
             a.size,
@@ -583,20 +609,27 @@ void MonitorLoop(std::ofstream& out, HANDLE hProcess, bool symbolsAvailable)
     out << "\n\nGame process exited.\n";
     out.flush();
 
-    LOG("Final dump complete.\n");
+    //LOG("Final dump complete.\n");
+}
+
+void HideConsole()
+{
+    HWND hwnd = GetConsoleWindow();
+    if (hwnd)
+        ShowWindow(hwnd, SW_HIDE);
 }
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR lpCmdLine, int)
 {
-    // Install exception handler
+
     SetUnhandledExceptionFilter(HelperUnhandledExceptionFilter);
 
     AllocConsole();
+    //HideConsole();
     FILE* consoleOut;
     freopen_s(&consoleOut, "CONOUT$", "w", stdout);
     setvbuf(stdout, NULL, _IONBF, 0);
 
-    // ADD THIS: Open log file
     char logPath[MAX_PATH];
     GetCurrentDirectoryA(MAX_PATH, logPath);
     strcat_s(logPath, "\\CrashLoggerHelper.log");
@@ -604,23 +637,22 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR lpCmdLine, int)
     if (!logFile)
     {
         printf("ERROR: Failed to open log file!\n");
-        getchar();
         return 1;
     }
 
-    LOG("Starting allocation dump monitor...\n");
+    //LOG("Starting allocation dump monitor...\n");
 
     if (!InitSharedMemory(false))
     {
-        LOG("ERROR: Failed to initialize shared memory!\n");
-        LOG("Press Enter to exit...\n");
-        getchar();
+        //LOG("ERROR: Failed to initialize shared memory!\n");
+        //LOG("Press Enter to exit...\n");
         return 1;
     }
 
-    LOG("Shared memory initialized successfully.\n");
+    //LOG("After InitSharedMemory (returned=%d)\n", MB_OK);
 
-    // Method 1: Find by process name
+    //LOG("Shared memory initialized successfully.\n");
+
     DWORD processes[1024], cbNeeded;
     if (EnumProcesses(processes, sizeof(processes), &cbNeeded))
     {
@@ -629,7 +661,11 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR lpCmdLine, int)
         {
             if (processes[i] == 0) continue;
 
-            HANDLE hProc = OpenProcess(PROCESS_VM_READ | PROCESS_QUERY_INFORMATION | PROCESS_VM_OPERATION, FALSE, processes[i]);
+            HANDLE hProc = OpenProcess(
+                PROCESS_VM_READ | PROCESS_QUERY_INFORMATION | PROCESS_VM_OPERATION | PROCESS_QUERY_LIMITED_INFORMATION,
+                FALSE,
+                processes[i]
+            );
             if (hProc)
             {
                 char processName[MAX_PATH];
@@ -637,7 +673,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR lpCmdLine, int)
                 {
                     if (_stricmp(processName, "Oblivion.exe") == 0)
                     {
-                        LOG("Found Oblivion.exe with PID: %u\n", processes[i]);
+                        //LOG("Found Oblivion.exe with PID: %u\n", processes[i]);
                         hOblivionProcess = hProc;
                         break;
                     }
@@ -649,17 +685,16 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR lpCmdLine, int)
 
     if (!hOblivionProcess)
     {
-        LOG("ERROR: Could not find Oblivion.exe process!\n");
-        LOG("Press Enter to exit...\n");
-        getchar();
+        //LOG("ERROR: Could not find Oblivion.exe process!\n");
+        //LOG("Press Enter to exit...\n");
         return 1;
     }
 
-    LOG("Oblivion process handle: %p\n", hOblivionProcess);
+    //LOG("Oblivion process handle: %p\n", hOblivionProcess);
 
     char workingDirectory[MAX_PATH];
     GetCurrentDirectoryA(MAX_PATH, workingDirectory);
-    LOG("Working directory: %s\n", workingDirectory);
+    //LOG("Working directory: %s\n", workingDirectory);
 
     bool symbolsAvailable = false;
     char symbolPath[MAX_PATH] = {};
@@ -670,39 +705,34 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR lpCmdLine, int)
     std::string lookPath = std::format("{};{}\\Data\\OBSE\\plugins;{};{}",
         workingDirectory, workingDirectory, symbolPath, altSymbolPath);
 
-    // Initialize symbols for the OBLIVION process, not current process
-    SymCleanup(hOblivionProcess);
     symbolsAvailable = SymInitialize(hOblivionProcess, lookPath.c_str(), TRUE);
-    LOG("Symbol initialization: %s\n", symbolsAvailable ? "SUCCESS" : "FAILED");
+    //LOG("Symbol initialization: %s\n", symbolsAvailable ? "SUCCESS" : "FAILED");
 
     char filePath[MAX_PATH];
     sprintf_s(filePath, "%s\\AllocDump.txt", workingDirectory);
-    LOG("Output file: %s\n", filePath);
+    //LOG("Output file: %s\n", filePath);
 
     std::ofstream out(filePath);
     if (!out.is_open())
     {
-        LOG("ERROR: Failed to open output file!\n");
-        LOG("Press Enter to exit...\n");
-        getchar();
+        //LOG("ERROR: Failed to open output file!\n");
+        //LOG("Press Enter to exit...\n");
         CloseHandle(hOblivionProcess);
         return 1;
     }
 
-    LOG("Output file opened successfully.\n");
+    //LOG("Output file opened successfully.\n");
 
     out << "Waiting for allocations...\n";
     out.flush();
 
-    // Pass Oblivion's handle to MonitorLoop
     MonitorLoop(out, hOblivionProcess, symbolsAvailable);
 
-    LOG("Exiting...\n");
+    //LOG("Exiting...\n");
     out.close();
     SymCleanup(hOblivionProcess);
-    CloseHandle(hOblivionProcess); // Don't forget to close!
+    CloseHandle(hOblivionProcess);
 
-    LOG("Press Enter to exit...\n");
-    getchar();
+    //LOG("Press Enter to exit...\n");
     return 0;
 }

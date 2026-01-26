@@ -2,10 +2,29 @@
 #include "CrashLogger.hpp"
 #include <filesystem>
 #include <format>
-#include "IDebugLog.h"
+#include "SharedMem.h"
 
 namespace CrashLogger
 {
+    bool IsReadablePage(DWORD protect)
+    {
+        if (protect & (PAGE_NOACCESS | PAGE_GUARD))
+            return false;
+
+        switch (protect & 0xFF)   // low bits are type, high bits are modifiers
+        {
+        case PAGE_READONLY:
+        case PAGE_READWRITE:
+        case PAGE_WRITECOPY:
+        case PAGE_EXECUTE_READ:
+        case PAGE_EXECUTE_READWRITE:
+        case PAGE_EXECUTE_WRITECOPY:
+            return true;
+        default:
+            return false;
+        }
+    }
+
     bool GetStringForClassLabel(
         void* object,
         std::string& labelName,
@@ -39,40 +58,67 @@ namespace CrashLogger
     }
 
     bool GetAsString(
-        const void* object,
+        HANDLE process,
+        const void* remotePtr,
         std::string& labelName,
-        std::string& string)
+        std::string& outString)
     {
-        if (!object)
+        if (!remotePtr || !process)
             return false;
 
         MEMORY_BASIC_INFORMATION mbi{};
-        if (!VirtualQuery(object, &mbi, sizeof(mbi)))
+        if (!VirtualQueryEx(process, remotePtr, &mbi, sizeof(mbi)))
             return false;
 
-        // Must be readable committed memory
+        // Must be committed, non-guard, readable page
         if (mbi.State != MEM_COMMIT)
             return false;
-        if (!(mbi.Protect & (PAGE_READONLY | PAGE_READWRITE)))
+
+        if (mbi.Protect & (PAGE_NOACCESS | PAGE_GUARD))
             return false;
 
-        const char* cstr = static_cast<const char*>(object);
+        // Accept typical readable protections
+        const DWORD prot = (mbi.Protect & 0xFF);
+        switch (prot)
+        {
+        case PAGE_READONLY:
+        case PAGE_READWRITE:
+        case PAGE_WRITECOPY:
+        case PAGE_EXECUTE_READ:
+        case PAGE_EXECUTE_READWRITE:
+        case PAGE_EXECUTE_WRITECOPY:
+            break;
+        default:
+            return false;
+        }
 
-        // Don't read past this region
+        const char* remoteStr = static_cast<const char*>(remotePtr);
+
+        // Calculate how many bytes we *could* safely read from this region
         const size_t maxReadable =
-            (uintptr_t)mbi.BaseAddress + mbi.RegionSize - (uintptr_t)cstr;
+            (uintptr_t)mbi.BaseAddress + mbi.RegionSize - (uintptr_t)remoteStr;
         const size_t maxCheck = (std::min)(maxReadable, size_t(MAX_PATH));
 
-        // Find actual string length and validate characters
+        if (maxCheck == 0)
+            return false;
+
+        // Read that chunk into a local buffer
+        char buffer[MAX_PATH]{};
+        SIZE_T bytesRead = 0;
+        if (!ReadProcessMemory(process, remoteStr, buffer, maxCheck, &bytesRead) || bytesRead == 0)
+            return false;
+
+        // Now we validate and find the actual length *inside our buffer*
         size_t actualLen = 0;
-        for (size_t i = 0; i < maxCheck; i++)
+        for (size_t i = 0; i < bytesRead; i++)
         {
-            char c = cstr[i];
+            char c = buffer[i];
             if (c == '\0')
             {
                 actualLen = i;
                 break;
             }
+
             // Allow printable ASCII plus common whitespace
             if (c < 0x20 || c > 0x7E)
             {
@@ -82,21 +128,18 @@ namespace CrashLogger
         }
 
         // Must have found null terminator and be reasonable length
-        if (actualLen == 0 || actualLen >= maxCheck || actualLen < 3)
+        if (actualLen == 0 || actualLen >= bytesRead || actualLen < 3)
             return false;
 
-        // Use actual length, not maxCheck
-        std::string sanitized = SanitizeString(
-            std::string(cstr, actualLen)
-        );
-
+        std::string sanitized = SanitizeString(std::string(buffer, actualLen));
         if (sanitized.size() < 3)
             return false;
 
         labelName = "String";
-        string = sanitized;
+        outString = std::move(sanitized);
         return true;
     }
+
 
     ResolveResult ResolveObject(void* object, HANDLE hProcess)
     {
@@ -106,8 +149,7 @@ namespace CrashLogger
             return out;
 
         std::string label, name, desc;
-
-        _MESSAGE("block 1");
+        LOG("GetStringForClassLabel");
         if (GetStringForClassLabel(object, label, name, desc, hProcess))
         {
             out.kind = ResolveKind::Label;
@@ -117,7 +159,7 @@ namespace CrashLogger
             return out;
         }
 
-        _MESSAGE("block 2");
+        LOG("GetClassNameFromRTTIorPDB");
         if (const auto rtti = PDB::GetClassNameFromRTTIorPDB(object, hProcess);
             !rtti.empty())
         {
@@ -127,8 +169,8 @@ namespace CrashLogger
             return out;
         }
 
-        _MESSAGE("block 3");
-        if (GetAsString(object, label, desc))
+        LOG("GetAsString");
+        if (GetAsString(hProcess, object, label, desc))
         {
             out.kind = ResolveKind::String;
             out.label = label;

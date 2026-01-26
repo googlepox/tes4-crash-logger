@@ -31,7 +31,7 @@ namespace CrashLogger::Memory
 	static std::unordered_map<void*, AllocInfo> g_activeAllocs;
 	static std::mutex g_allocMutex;
 
-	constexpr size_t THREAD_BUF_SZ = 1 << 18;
+	constexpr size_t THREAD_BUF_SZ = 4096;
 	constexpr size_t MAX_THREAD_LOGS = 64;
 
 	std::atomic<uint64_t> g_totalActiveBytes{ 0 };
@@ -59,6 +59,17 @@ namespace CrashLogger::Memory
 	// Global registration array (fixed size, lock-free CAS insertion)
 	static std::atomic<ThreadLog*> g_threadLogs[MAX_THREAD_LOGS] = {};
 
+	inline bool IsHeapCritical()
+	{
+		if (!g_formHeap)
+			return false;
+
+		const float used = float(g_formHeap->field_014);
+		const float total = float(g_formHeap->field_00C);
+
+		return (used / total) >= 0;
+	}
+
 	// Helper to find/claim a slot for this thread
 	static ThreadLog* RegisterCurrentThreadLog(ThreadLog* local)
 	{
@@ -83,39 +94,53 @@ namespace CrashLogger::Memory
 		// No slot available
 		return nullptr;
 	}
-
-	thread_local ThreadLog g_localThreadLog;
+	
+	static thread_local bool disabled = false;
+	thread_local ThreadLog* g_localThreadLog = nullptr;
 
 	static inline ThreadLog* GetThreadLog()
 	{
-		static thread_local bool registered = false;
-		static thread_local bool disabled = false;
-
 		if (disabled)
 			return nullptr;
 
-		if (!registered)
+		if (!g_localThreadLog)
 		{
-			if (!RegisterCurrentThreadLog(&g_localThreadLog))
+			auto* log = (ThreadLog*)VirtualAlloc(
+				nullptr,
+				sizeof(ThreadLog),
+				MEM_COMMIT | MEM_RESERVE,
+				PAGE_READWRITE
+			);
+
+			if (!log)
 			{
-				// No slot available – stop recording on this thread
-				g_overflowCount.fetch_add(1, std::memory_order_relaxed);
 				disabled = true;
 				return nullptr;
 			}
 
-			registered = true;
+			log->reset();
+
+			if (!RegisterCurrentThreadLog(log))
+			{
+				VirtualFree(log, 0, MEM_RELEASE);
+				disabled = true;
+				return nullptr;
+			}
+
+			g_localThreadLog = log;
 		}
 
-		return &g_localThreadLog;
+		return g_localThreadLog;
 	}
+
+
 
 	inline void RecordAlloc(uint32_t caller, uint32_t size, void* ptr) noexcept
 	{
 		ThreadLog* tlog = GetThreadLog();
 		if (!tlog) return;
 
-		if (size < 64)
+		if (size < 16)
 			return;
 
 		static thread_local uint32_t sample = 0;
@@ -126,9 +151,8 @@ namespace CrashLogger::Memory
 		uint32_t slot = idx % THREAD_BUF_SZ;
 
 		tlog->buf[slot].ptr = ptr;
-		tlog->buf[slot].size = size;
+		tlog->buf[slot].sizeAndType = (size & AE_SIZE_MASK);
 		tlog->buf[slot].caller = caller;
-		tlog->buf[slot].type = 0;
 		
 
 		tlog->writeIndex.store(idx + 1, std::memory_order_release);
@@ -143,9 +167,8 @@ namespace CrashLogger::Memory
 		uint32_t slot = idx % THREAD_BUF_SZ;
 
 		tlog->buf[slot].ptr = ptr;
-		tlog->buf[slot].size = 0;
+		tlog->buf[slot].sizeAndType = AE_TYPE_FREE;
 		tlog->buf[slot].caller = caller;
-		tlog->buf[slot].type = 1; // free
 
 		tlog->writeIndex.store(idx + 1, std::memory_order_release);
 	}
@@ -267,21 +290,24 @@ namespace CrashLogger::Memory
 	void TickMemoryProfiler()
 	{
 		if (!g_profilingEnabled.load(std::memory_order_acquire))
-			return;
-
-		static uint32_t counter = 0;
-		if ((++counter & 0x3F) == 0) // every ~64 calls
 		{
-			FlushThreadLogsToSharedMemory();
+			if (IsHeapCritical())
+			{
+				g_profilingEnabled.store(true, std::memory_order_release);
+			}
+			else
+			{
+				return;
+			}
 		}
+
+		FlushThreadLogsToSharedMemory();
 	}
 
 	void MemoryProfilerThread()
 	{
 		while (g_profilingStarted.load(std::memory_order_acquire))
 		{
-			//g_shm->header.alive.fetch_add(1, std::memory_order_release); // heartbeat
-
 			TickMemoryProfiler();
 			std::this_thread::sleep_for(std::chrono::milliseconds(10));
 		}
@@ -290,9 +316,9 @@ namespace CrashLogger::Memory
 
 	void StartMemoryProfiler()
 	{
-		g_profilingEnabled.store(true, std::memory_order_release);
 		g_profilingStarted.store(true, std::memory_order_release);
-		//g_memoryProfilerThread.detach();
+		g_memoryProfilerThread = std::thread(MemoryProfilerThread);
+		g_memoryProfilerThread.detach();
 	}
 
 	void LaunchHelper()

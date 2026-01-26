@@ -1,5 +1,6 @@
 #include <windows.h>
 #include "SharedMem.h"
+#include <cstdio>
 
 static constexpr size_t SHM_SIZE = sizeof(SharedMemBuffer);
 static const char* SHM_NAME = "CrashLogger_MemEvents";
@@ -10,6 +11,9 @@ bool g_shmReady = false;
 static HANDLE g_hMap = nullptr;
 
 HMODULE g_hThisDLL = nullptr;
+
+
+FILE* logFile = nullptr;
 
 bool InitSharedMemory(bool create)
 {

@@ -31,8 +31,9 @@ namespace CrashLogger
         std::string& description,
         HANDLE hProcess);
     bool GetAsString(
-        const void* object,
+        HANDLE process,
+        const void* remotePtr,
         std::string& labelName,
-        std::string& string);
+        std::string& outString);
     ResolveResult ResolveObject(void* object, HANDLE hProcess);
 }

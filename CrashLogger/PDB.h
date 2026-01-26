@@ -24,11 +24,11 @@ namespace CrashLogger::PDB
     UInt32 GetModuleBase(UInt32 eip, HANDLE process);
     std::string GetSymbol(UInt32 eip, HANDLE process);
     std::string GetLine(UInt32 eip, HANDLE process);
+    std::string IsReadable(const void* p, size_t size);
+    std::string GetObjectClassNameSafe(void* objBase, HANDLE hProcess) noexcept;
+    std::string GetObjectClassNameInternal2(void* objBase, HANDLE process);
+    std::string GetClassNameFromRTTI(void* object, HANDLE process) noexcept;
+    std::string GetClassNameFromPDB(void* object, HANDLE process) noexcept;
+    std::string GetClassNameFromRTTIorPDB(void* object, HANDLE process) noexcept;
 
-    std::string GetClassNameFromRTTI(void* object);
-    std::string GetClassNameFromPDB(void* object, HANDLE hProcess);
-    std::string GetClassNameFromRTTIorPDB(void* object, HANDLE hProcess);
-
-    const char* GetObjectClassNameSafe(void* objBase);
-    bool IsReadable(const void* p, size_t size = sizeof(void*));
 }

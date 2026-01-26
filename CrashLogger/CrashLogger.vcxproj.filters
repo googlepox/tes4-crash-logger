@@ -147,7 +147,6 @@
     <ClInclude Include="..\OBSE\obse\obse_common\SafeWrite.h">
       <Filter>obse</Filter>
     </ClInclude>
-    <ClInclude Include="SharedMem.h" />
     <ClInclude Include="CrashLoggerAPI.h">
       <Filter>include</Filter>
     </ClInclude>
@@ -182,6 +181,9 @@
     </ClInclude>
     <ClInclude Include="Formatter.hpp">
       <Filter>internal</Filter>
+    </ClInclude>
+    <ClInclude Include="SharedMem.h">
+      <Filter>include</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

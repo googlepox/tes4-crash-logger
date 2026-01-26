@@ -13,7 +13,7 @@ namespace CrashLogger::Stack
 
             // Validate it's a readable pointer
             MEMORY_BASIC_INFORMATION mbi{};
-            if (!VirtualQuery(object, &mbi, sizeof(mbi)))
+            if (!VirtualQueryEx(hProcess, object, &mbi, sizeof(mbi)))
                 return false;
 
             if (mbi.State != MEM_COMMIT)
@@ -32,22 +32,31 @@ namespace CrashLogger::Stack
             if (!vtablePtr) return false;
 
             // Check if vtable is in executable memory (where vtables live)
-            if (!VirtualQuery(vtablePtr, &mbi, sizeof(mbi)))
+            if (!VirtualQueryEx(hProcess, vtablePtr, &mbi, sizeof(mbi)))
                 return false;
 
             if (!(mbi.Protect & (PAGE_EXECUTE_READ | PAGE_READONLY)))
                 return false;
 
-            // Now try to get RTTI
-            if (const auto& name = PDB::GetClassNameFromRTTIorPDB((void*)object, hProcess); !name.empty())
-            {
-                // Additional validation: RTTI names shouldn't contain '+' (those are offsets)
-                if (name.find('+') != std::string::npos)
-                    return false;
+			if (auto name = PDB::GetClassNameFromRTTIorPDB((void*)object, hProcess); !name.empty())
+			{
+				if (name.find('+') != std::string::npos)
+					return false;
 
-                buffer += std::format("0x{:08X} ==> RTTI: ", *(UInt32*)object) + name;
-                return true;
-            }
+				auto addr = reinterpret_cast<std::uintptr_t>(object);
+
+				if (auto rtti = CrashLogger::PDB::GetClassNameFromRTTI(object, hProcess); !rtti.empty())
+				{
+					buffer += std::format("0x{:08X} ==> RTTI: {}", static_cast<std::uint32_t>(addr), rtti);
+					return true;
+				}
+
+				if (auto sym = CrashLogger::PDB::GetClassNameFromPDB(object, hProcess); !sym.empty())
+				{
+					buffer += std::format("0x{:08X} ==> PDB: {}", static_cast<std::uint32_t>(addr), sym);
+					return true;
+				}
+			}
             return false;
         }
         catch (...) { return false; }
@@ -66,7 +75,7 @@ namespace CrashLogger::Stack
 		{
 			return true;
 		}
-		if (GetAsString(object, labelName, description))
+		if (GetAsString(hProcess, object, labelName, description))
 		{
 			buffer += std::format("0x{:08X} ==> ", *(UInt32*)object) + labelName + ": " + '"' + description + '"';
 			return true;

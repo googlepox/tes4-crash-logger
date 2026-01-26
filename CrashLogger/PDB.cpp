@@ -1,181 +1,281 @@
 #include "PDB.h"
 #include <DbgHelp.h>
 #include <windows.h>
-#include <iostream>
 #include <string>
+#include <string_view>
+#include <format>
+#include <algorithm>
+#include <IDebugLog.h>
+#include "SharedMem.h"
 
-#pragma comment(lib, "DbgHelp.lib")  
+#pragma comment(lib, "DbgHelp.lib")
 
 namespace CrashLogger::PDB
 {
+
     std::string GetModule(UInt32 eip, HANDLE process)
     {
-        IMAGEHLP_MODULE module = {};
-        module.SizeOfStruct = sizeof(module);
-        if (!SymGetModuleInfo(process, eip, &module)) return "";
-        return module.ModuleName;
+        IMAGEHLP_MODULE module{};
+        module.SizeOfStruct = sizeof(IMAGEHLP_MODULE);
+
+        if (!SymGetModuleInfo(process, eip, &module))
+            return {};
+
+        return std::string(module.ModuleName ? module.ModuleName : "");
     }
 
     UInt32 GetModuleBase(UInt32 eip, HANDLE process)
     {
-        IMAGEHLP_MODULE module = {};
-        module.SizeOfStruct = sizeof(module);
-        if (!SymGetModuleInfo(process, eip, &module)) return 0;
-        return module.BaseOfImage;
+        IMAGEHLP_MODULE module{};
+        module.SizeOfStruct = sizeof(IMAGEHLP_MODULE);
+
+        if (!SymGetModuleInfo(process, eip, &module))
+            return 0;
+
+        return static_cast<UInt32>(module.BaseOfImage);
     }
 
     std::string GetSymbol(UInt32 eip, HANDLE process)
     {
         char symbolBuffer[sizeof(SYMBOL_INFO) + 255];
-        SYMBOL_INFO* symbol = reinterpret_cast<SYMBOL_INFO*>(symbolBuffer);
+        auto* symbol = reinterpret_cast<SYMBOL_INFO*>(symbolBuffer);
+
         symbol->SizeOfStruct = sizeof(SYMBOL_INFO);
         symbol->MaxNameLen = 254;
 
-        DWORD64 offset = 0;
-        if (!SymFromAddr(process, eip, &offset, symbol)) return "";
+        DWORD64 displacement = 0;
+        if (!SymFromAddr(process, eip, &displacement, symbol))
+            return {};
 
-        // Format with hex offset, not decimal
-        return std::format("{}+0x{:X}", symbol->Name, offset);
+        // "Name+0xDISPLACEMENT"
+        return std::format("{}+0x{:X}", symbol->Name, static_cast<unsigned long long>(displacement));
     }
 
     std::string GetLine(UInt32 eip, HANDLE process)
     {
-        char lineBuffer[sizeof(IMAGEHLP_LINE) + 255];
-        IMAGEHLP_LINE* line = reinterpret_cast<IMAGEHLP_LINE*>(lineBuffer);
-        line->SizeOfStruct = sizeof(IMAGEHLP_LINE);
+        IMAGEHLP_LINE line{};
+        line.SizeOfStruct = sizeof(IMAGEHLP_LINE);
 
-        DWORD offset = 0;
-        if (!SymGetLineFromAddr(process, eip, &offset, line)) return "";
-        return std::format("{}:{}", line->FileName, line->LineNumber);
+        DWORD displacement = 0;
+        if (!SymGetLineFromAddr(process, eip, &displacement, &line))
+            return {};
+
+        if (!line.FileName)
+            return {};
+
+        return std::format("{}:{}", line.FileName, line.LineNumber);
     }
 
-    bool IsReadable(const void* p, size_t size)
+
+    static bool IsReadable(HANDLE process, const void* p, size_t size)
     {
+        if (!p || !process)
+            return false;
+
         MEMORY_BASIC_INFORMATION mbi{};
-        if (!VirtualQuery(p, &mbi, sizeof(mbi))) return false;
-        if (mbi.State != MEM_COMMIT) return false;
-        if (mbi.Protect & (PAGE_NOACCESS | PAGE_GUARD)) return false;
+        if (!VirtualQueryEx(process, p, &mbi, sizeof(mbi)))
+            return false;
+
+        if (mbi.State != MEM_COMMIT)
+            return false;
+
+        if (mbi.Protect & (PAGE_NOACCESS | PAGE_GUARD))
+            return false;
+
         return size <= mbi.RegionSize;
     }
 
-    const char* GetObjectClassNameSafe(void* objBase)
-    {
-        if (!objBase) return "";
-        if (!IsReadable(objBase, sizeof(void*))) return "";
 
-        void** vtbl = *(void***)objBase;
-        if (!vtbl) return "";
-        if (!IsReadable(vtbl - 1, sizeof(void*))) return "";
+    static std::string GetObjectClassNameSafe(void* objBase, HANDLE process) noexcept
+    {
+        if (!objBase || !process)
+            return {};
+
+        // Read vtable pointer from object
+        if (!IsReadable(process, objBase, sizeof(void*)))
+            return {};
+
+        void** vtbl = *reinterpret_cast<void***>(objBase);
+        if (!vtbl)
+            return {};
+
+        // RTTI usually at vtbl[-1]
+        if (!IsReadable(process, vtbl - 1, sizeof(void*)))
+            return {};
 
         void* colPtr = vtbl[-1];
-        if (!colPtr) return "";
-        if (!IsReadable(colPtr, sizeof(RTTILocator))) return "";
+        if (!colPtr)
+            return {};
 
-        RTTILocator* rtti = static_cast<RTTILocator*>(colPtr);
-        if (!rtti->type || !IsReadable(rtti->type, sizeof(RTTIType))) return "";
+        if (!IsReadable(process, colPtr, sizeof(RTTILocator)))
+            return {};
+
+        auto* rtti = static_cast<RTTILocator*>(colPtr);
+        if (!rtti->type || !IsReadable(process, rtti->type, sizeof(RTTIType)))
+            return {};
 
         RTTIType* type = rtti->type;
-        if (!IsReadable(type->name, 4)) return "";
-        if (type->name[0] != '.' || type->name[1] != '?') return "";
 
+        // Check name pointer
+        if (!IsReadable(process, type->name, 4))
+            return {};
+
+        if (type->name[0] != '.' || type->name[1] != '?')
+            return {};
+
+        // Ensure null-terminated within MAX_PATH
         for (UInt32 i = 0; i < MAX_PATH; i++)
         {
-            if (!IsReadable(&type->name[i], 1)) return "";
-            if (type->name[i] == '\0') return type->name;
+            if (!IsReadable(process, &type->name[i], 1))
+                return {};
+
+            if (type->name[i] == '\0')
+                return std::string(type->name);
         }
-        return "";
+
+        return {};
     }
 
-    std::string GetClassNameFromRTTI(void* object)
+    std::string GetObjectClassNameInternal2(void* objBase, HANDLE hProcess)
     {
-        std::string name = GetObjectClassNameSafe(object);
-        if (name.empty()) return "";
-
-        char buffer[MAX_PATH] = {};
-        UnDecorateSymbolName(name.c_str() + 1, buffer, MAX_PATH, UNDNAME_NO_ARGUMENTS);
-        std::string undecorated = buffer;
-
-        if (undecorated.size() > 6)
-            return undecorated.substr(6);
-        return undecorated;
-    }
-
-    std::string GetClassNameFromPDB(void* object, HANDLE hProcess)
-    {
-        if (!object) return "";
-
-        // Check alignment
-        if ((reinterpret_cast<uintptr_t>(object) & 0x3) != 0)
-            return "";
-
-        // Validate readable
-        if (!IsReadable(object, sizeof(void*)))
-            return "";
-
-        std::string name;
         try
         {
-            // Read the vtable pointer
-            void* vtablePtr = *reinterpret_cast<void**>(object);
-            if (!vtablePtr) return "";
+            if (!objBase)
+                return {};
 
-            // Verify vtable is in read-only/executable memory
-            MEMORY_BASIC_INFORMATION mbi{};
-            if (!VirtualQuery(vtablePtr, &mbi, sizeof(mbi)))
-                return "";
+            void** obj = static_cast<void**>(objBase);
+            if (!obj[0])
+                return {};
 
-            if (!(mbi.Protect & (PAGE_EXECUTE_READ | PAGE_READONLY)))
-                return "";
+            auto** vtbl = reinterpret_cast<RTTILocator**>(obj[0]);
+            auto* rtti = vtbl[-1];
+            if (!rtti || !rtti->type || !rtti->type->name)
+                return {};
 
-            // Get symbol for vtable address
-            name = GetSymbol(reinterpret_cast<UInt32>(vtablePtr), hProcess);
+            RTTIType* type = rtti->type;
+
+            if ((type->name[0] == '.') && (type->name[1] == '?'))
+            {
+                for (UInt32 i = 0; i < MAX_PATH; i++)
+                {
+                    if (type->name[i] == '\0')
+                        return std::string(type->name);
+                }
+            }
+
+            return {};
         }
         catch (...)
         {
-            return "";
+            return {};
         }
-
-        // Look for vftable marker
-        size_t pos = name.find("::`vftable'");
-        if (pos == std::string::npos)
-            return "";  // Not a vtable symbol
-
-        return name.substr(0, pos);
     }
 
-    std::string GetClassNameFromRTTIorPDB(void* object, HANDLE hProcess)
+
+    std::string GetClassNameFromRTTI(void* object, HANDLE process) noexcept
     {
-        if (!object) return "";
+        _MESSAGE("rtti1");
 
-        // Check alignment first
-        if ((reinterpret_cast<uintptr_t>(object) & 0x3) != 0)
-            return "";
+        if (!object || !process)
+            return {};
 
-        // Try RTTI first (more reliable)
-        std::string str = GetClassNameFromRTTI(object);
-        if (!str.empty())
+        std::string decorated = GetObjectClassNameSafe(object, process);
+
+        _MESSAGE("rtti2: decorated='%s'", decorated.c_str());
+        if (decorated.empty())
+            return {};
+
+        if (decorated.size() < 2 || decorated[0] != '.' || decorated[1] != '?')
         {
-            // Additional validation: reject obvious garbage
-            if (str.find('+') != std::string::npos)
-                return "";
-            if (str.find("Rtl") == 0 || str.find("Nt") == 0)
-                return "";
-            return str;
+            _MESSAGE("rtti3: bad decorated prefix");
+            return {};
         }
 
-        // Try PDB symbols
-        str = GetClassNameFromPDB(object, hProcess);
-        if (!str.empty())
+        _MESSAGE("rtti4: undecorating");
+
+        char tempBuffer[MAX_PATH]{};
+
+        BOOL ok = UnDecorateSymbolName(
+            decorated.c_str() + 1,
+            tempBuffer,
+            MAX_PATH - 1,
+            UNDNAME_NO_ARGUMENTS
+        );
+
+        tempBuffer[MAX_PATH - 1] = '\0';
+
+        _MESSAGE("rtti5: undecorated buffer='%s' ok=%d", tempBuffer, ok);
+
+        if (!ok)
+            return {};
+
+        size_t safeLen = strnlen(tempBuffer, MAX_PATH);
+        if (safeLen == MAX_PATH)
         {
-            // Reject function offsets
-            if (str.find('+') != std::string::npos)
-                return "";
-            // Reject system functions
-            if (str.find("Rtl") == 0 || str.find("Nt") == 0 ||
-                str.find("BCrypt") == 0 || str.find("Ordinal") == 0)
-                return "";
+            _MESSAGE("rttiX: undecorated NOT null-terminated (invalid RTTI)");
+            return {};
         }
 
-        return str;
+        std::string undec = std::string(tempBuffer, safeLen);
+
+        if (undec.size() > 200)
+        {
+            _MESSAGE("rttiX: undecorated suspiciously large");
+            return {};
+        }
+
+        // Strip "class " only if present
+        constexpr std::string_view classPrefix = "class ";
+
+        if (undec.rfind(classPrefix, 0) == 0 &&
+            undec.size() > classPrefix.size())
+        {
+            return undec.substr(classPrefix.size());
+        }
+
+        return undec;
+    }
+
+
+    std::string GetClassNameFromPDB(void* object, HANDLE process) noexcept
+    {
+        if (!object || !process)
+            return {};
+        _MESSAGE("pdb1");
+        // Make sure reading 4 bytes at object is safe
+        if (!IsReadable(process, object, sizeof(UInt32)))
+            return {};
+        _MESSAGE("pdb2");
+        UInt32 addr = 0;
+        std::memcpy(&addr, object, sizeof(addr));  // avoids UB, respects readability check
+        _MESSAGE("pdb3");
+        if (!addr)
+            return {};
+        _MESSAGE("pdb4");
+        std::string sym = GetSymbol(addr, process);
+        if (sym.empty())
+            return {};
+        _MESSAGE("pdb5");
+        // "Name+0x1234" -> "Name"
+        if (auto plusPos = sym.find('+'); plusPos != std::string::npos)
+            sym = sym.substr(0, plusPos);
+        _MESSAGE("pdb6");
+        // "Foo::Bar::`vftable'" -> "Foo::Bar"
+        if (auto vftPos = sym.find("::`vftable'"); vftPos != std::string::npos)
+            sym = sym.substr(0, vftPos);
+        _MESSAGE("pdb7");
+        return sym;
+    }
+
+
+    std::string GetClassNameFromRTTIorPDB(void* object, HANDLE process) noexcept
+    {
+        if (!object || !process)
+            return {};
+
+        if (auto rtti = GetClassNameFromRTTI(object, process); !rtti.empty())
+            return rtti;
+
+        return GetClassNameFromPDB(object, process);
     }
 }
