@@ -13,59 +13,6 @@
 namespace CrashLogger::PDB
 {
 
-    std::string GetModule(UInt32 eip, HANDLE process)
-    {
-        IMAGEHLP_MODULE module{};
-        module.SizeOfStruct = sizeof(IMAGEHLP_MODULE);
-
-        if (!SymGetModuleInfo(process, eip, &module))
-            return {};
-
-        return std::string(module.ModuleName ? module.ModuleName : "");
-    }
-
-    UInt32 GetModuleBase(UInt32 eip, HANDLE process)
-    {
-        IMAGEHLP_MODULE module{};
-        module.SizeOfStruct = sizeof(IMAGEHLP_MODULE);
-
-        if (!SymGetModuleInfo(process, eip, &module))
-            return 0;
-
-        return static_cast<UInt32>(module.BaseOfImage);
-    }
-
-    std::string GetSymbol(UInt32 eip, HANDLE process)
-    {
-        char symbolBuffer[sizeof(SYMBOL_INFO) + 255];
-        auto* symbol = reinterpret_cast<SYMBOL_INFO*>(symbolBuffer);
-
-        symbol->SizeOfStruct = sizeof(SYMBOL_INFO);
-        symbol->MaxNameLen = 254;
-
-        DWORD64 displacement = 0;
-        if (!SymFromAddr(process, eip, &displacement, symbol))
-            return {};
-
-        // "Name+0xDISPLACEMENT"
-        return std::format("{}+0x{:X}", symbol->Name, static_cast<unsigned long long>(displacement));
-    }
-
-    std::string GetLine(UInt32 eip, HANDLE process)
-    {
-        IMAGEHLP_LINE line{};
-        line.SizeOfStruct = sizeof(IMAGEHLP_LINE);
-
-        DWORD displacement = 0;
-        if (!SymGetLineFromAddr(process, eip, &displacement, &line))
-            return {};
-
-        if (!line.FileName)
-            return {};
-
-        return std::format("{}:{}", line.FileName, line.LineNumber);
-    }
-
 
     static bool IsReadable(HANDLE process, const void* p, size_t size)
     {
@@ -350,56 +297,69 @@ namespace CrashLogger::PDB
     }
 
 
-    std::string GetClassNameFromPDB(void* object, HANDLE process) noexcept
+    extern std::string GetModule(UInt32 eip, HANDLE process)
     {
-        if (!object)
-            return {};
+        IMAGEHLP_MODULE module = { 0 };
+        module.SizeOfStruct = sizeof(IMAGEHLP_MODULE);
+        if (!SymGetModuleInfo(process, eip, &module)) return "";
 
-        // Normalize the handle
-        HANDLE effective = process ? process : GetCurrentProcess();
+        return module.ModuleName;
+    }
 
-        UInt32 addr = 0;
+    extern UInt32 GetModuleBase(UInt32 eip, HANDLE process)
+    {
+        IMAGEHLP_MODULE module = { 0 };
+        module.SizeOfStruct = sizeof(IMAGEHLP_MODULE);
+        if (!SymGetModuleInfo(process, eip, &module)) return 0;
 
-        if (effective == GetCurrentProcess())
-        {
-            // In-process: object is a real pointer in *this* module
-            if (!IsReadable(effective, object, sizeof(addr)))
-                return {};
+        return module.BaseOfImage;
+    }
 
-            // Safe-ish to deref directly
-            std::memcpy(&addr, object, sizeof(addr));
-        }
-        else
-        {
-            // Remote process: NEVER deref directly – always use RPM
-            SIZE_T bytesRead = 0;
-            if (!ReadProcessMemory(effective,
-                object,
-                &addr,
-                sizeof(addr),
-                &bytesRead) ||
-                bytesRead != sizeof(addr))
-            {
-                return {};
-            }
-        }
+    extern std::string GetSymbol(UInt32 eip, HANDLE process)
+    {
+        char symbolBuffer[sizeof(SYMBOL_INFO) + 255];
+        const auto symbol = (SYMBOL_INFO*)symbolBuffer;
 
-        if (!addr)
-            return {};
+        symbol->SizeOfStruct = sizeof(SYMBOL_INFO);
+        symbol->MaxNameLen = 254;
+        DWORD64 offset = 0;
 
-        std::string sym = GetSymbol(addr, effective);
-        if (sym.empty())
-            return {};
+        if (!SymFromAddr(process, eip, &offset, symbol)) return "";
 
-        // "Name+0x1234" -> "Name"
-        if (auto plusPos = sym.find('+'); plusPos != std::string::npos)
-            sym = sym.substr(0, plusPos);
+        const std::string functioName = symbol->Name;
 
-        // "Foo::Bar::`vftable'" -> "Foo::Bar"
-        if (auto vftPos = sym.find("::`vftable'"); vftPos != std::string::npos)
-            sym = sym.substr(0, vftPos);
+        return std::format("{}+0x{:0X}", functioName, offset);
+    }
 
-        return sym;
+    extern std::string GetLine(UInt32 eip, HANDLE process)
+    {
+        char lineBuffer[sizeof(IMAGEHLP_LINE) + 255];
+        const auto line = (IMAGEHLP_LINE*)lineBuffer;
+        line->SizeOfStruct = sizeof(IMAGEHLP_LINE);
+
+        DWORD offset = 0;
+
+        if (!SymGetLineFromAddr(process, eip, &offset, line)) return "";
+
+        return std::format("{}:{:d}", line->FileName, line->LineNumber);
+    }
+
+    std::string& GetClassNameGetSymbol(void* object, std::string& buffer, HANDLE hProcess)
+    {
+        buffer = GetSymbol(*((UInt32*)object), hProcess);
+        return buffer;
+    }
+
+    std::string& GetClassNameFromPDBSEH(void* object, std::string& buffer, HANDLE hProcess)
+        try { GetClassNameGetSymbol(object, buffer, hProcess); return buffer; }
+    catch (...) { return buffer; }
+
+
+    std::string GetClassNameFromPDB(void* object, HANDLE hProcess) noexcept
+    {
+        std::string name;
+        GetClassNameFromPDBSEH(object, name, hProcess);
+        return name.substr(0, name.find("::`vftable'"));
     }
 
 

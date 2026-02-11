@@ -109,10 +109,10 @@ CrashLogger::ResolveResult ResolveObjectSafe(void* object)
     if (!object)
         return out;
 
-    if (!CrashLogger::Memory::IsReadable(object, sizeof(void*)))
+    if (!CrashLogger::Memory::IsReadable(&object, sizeof(void*)))
         return out;
 
-    return CrashLogger::ResolveObject(object, hOblivionProcess);
+    return CrashLogger::ResolveObject(&object, hOblivionProcess);
 }
 
 // Inner implementation – keep your real logic here.
@@ -328,7 +328,9 @@ void MonitorLoop(std::ofstream& out, HANDLE hProcess, bool symbolsAvailable)
             if (!info.objectType.empty())
                 continue;
 
-            auto res = CrashLogger::ResolveObject(ptr, hOblivionProcess);
+            void* value = ptr;
+
+            auto res = CrashLogger::ResolveObject(&value, hOblivionProcess);
             if (!res.name.empty())
             {
                 info.objectType = res.name;
@@ -337,7 +339,7 @@ void MonitorLoop(std::ofstream& out, HANDLE hProcess, bool symbolsAvailable)
             }
             else
             {
-                info.objectType = SafeGetLineForObjectRemote(ptr, hOblivionProcess);
+                info.objectType = SafeGetLineForObjectRemote(value, hOblivionProcess);
             }
 
             if (resolved >= 1000) // safety cap if you want one

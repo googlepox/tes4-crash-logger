@@ -253,6 +253,6 @@ namespace CrashLogger
 		Memory::StartMemoryProfiler();
 		Memory::LaunchHelper();
 
-		AddVectoredException();
+		//AddVectoredException();
 	}
 }

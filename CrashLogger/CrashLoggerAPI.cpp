@@ -141,7 +141,7 @@ namespace CrashLogger
     }
 
 
-    ResolveResult ResolveObject(void* object, HANDLE hProcess)
+    ResolveResult ResolveObject(void** object, HANDLE hProcess)
     {
         ResolveResult out;
 

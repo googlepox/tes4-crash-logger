@@ -97,25 +97,23 @@ namespace CrashLogger::Stack
 		}
 	}
 
-	std::string GetLineForObject(void** object, UInt32 depth, HANDLE hProcess)
+	std::string GetLineForObject(void** object, UINT32 depth, HANDLE hProcess)
 	{
-		if (!object || depth == 0) return "";
-
+		if (!object) return "";
 		std::string buffer;
-
-		for (UInt32 i = 0; i < depth && object; ++i)
+		UINT32 deref = 0;
+		do
 		{
 			if (GetStringForLabel(object, buffer, hProcess))
 			{
 				return buffer;
 			}
-
-			UInt32 deref = Dereference<UInt32>(object);
-			if (deref == 0) break;
-
+			deref = Dereference<UINT32>(object);
 			buffer += std::format("0x{:08X} ==> ", deref);
 			object = (void**)deref;
+			depth--;
 		}
+		while (object && depth);
 
 		return "";
 	}
