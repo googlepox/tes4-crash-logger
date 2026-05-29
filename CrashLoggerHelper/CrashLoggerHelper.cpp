@@ -25,7 +25,6 @@
 
 HANDLE hOblivionProcess = nullptr;
 
-static std::unordered_map<uint32_t, CallerCacheEntry> g_callerCache;
 uint32_t GetDepthForCaller(const std::string& callerSymbol)
 {
 	if (callerSymbol.find("Buffer") != std::string::npos ||
