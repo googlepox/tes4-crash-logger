@@ -99,22 +99,23 @@ inline auto LogClass(TESPathGrid& obj)
 //inline std::vector<std::string> LogClass(const ActorMover& obj) { if (obj.pkActor) return LogClass(*obj.pkActor); return {}; }
 inline std::vector<std::string> LogClass(const QueuedReference& obj) { if (obj.refr) return LogClass(*obj.refr); return {}; }
 
-/*
 
+/*
 inline std::vector<std::string>  LogClass(const BaseProcess& obj)
 {
-	for (const auto iter : *TESForm::GetAll())
+	for (const auto iter : (*g_dataHandler)->boundObjects)
 		if ((iter->eTypeID == TESForm::kType_Creature || iter->eTypeID == TESForm::kType_Character)
 			&& reinterpret_cast<Actor*>(iter)->pkBaseProcess == &obj)
 			return LogClass(reinterpret_cast<const TESObjectREFR&>(*iter));
 	return {};
-}
+} */
 
 inline auto LogClass(const NiControllerSequence& obj)
 {
 	return std::vector{
-		SanitizeString(std::string("Name: ") + std::string(obj.m_kName.m_kHandle)),
-		SanitizeString(std::string("RootName: ") + std::string(obj.m_kAccumRootName.m_kHandle))
+		//SanitizeString(std::string("Name: ") + std::string(obj.filePath),
+		SanitizeString(std::string("File: ") + std::string(obj.filePath))
+		//SanitizeString(std::string("RootName: ") + std::string(obj.m_kAccumRootName.m_kHandle))
 	};
 }
 
@@ -126,28 +127,32 @@ inline auto LogClass(const BSAnimGroupSequence& obj)
 }
 
 
-inline std::vector<std::string> LogClass(const AnimSequenceSingle& obj) { if (obj.pkAnim) return LogClass(*obj.pkAnim); return {}; }
+inline std::vector<std::string> LogClass(const AnimSequenceSingle& obj) { if (obj.Anim) return LogClass(*obj.Anim); return {}; }
 
 inline std::vector<std::string> LogClass(const AnimSequenceMultiple& obj)
 {
 	std::vector<std::string> vec;
 	UInt32 i = 0;
-	for (const auto iter : *obj.pkAnims)
+
+	for (NiTPointerList<BSAnimGroupSequence>::Node* node = obj.Anims->start; node; node = node->next)
 	{
-		i++;
-		vec.append_range(LogMember(std::format("AnimSequence{}", i), *iter));
+		if (!node->data)
+			continue;
+
+		++i;
+
+		auto sub = LogMember(
+			std::format("AnimSequence{}", i),
+			*node->data
+		);
+
+		vec.insert(vec.end(), sub.begin(), sub.end());
 	}
+
 	return vec;
 }
 
 inline std::vector<std::string> LogClass(const NiExtraData& obj)
-{
-	if (const auto name = obj.m_kName.GetStd(); !name.empty())
-		return std::vector{ '"' + SanitizeString(name.c_str()) + '"' };
-	return {};
-} */
-
-inline std::vector<std::string> LogClass(NiExtraData & obj)
 {
 	if (const auto name = obj.m_pcName; name)
 		return std::vector{ '"' + SanitizeString(name) + '"' };
