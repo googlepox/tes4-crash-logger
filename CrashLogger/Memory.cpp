@@ -2,7 +2,7 @@
 #include <psapi.h>
 #include "GameAPI.h"
 #include "PluginManager.h"
-#include <SafeWrite.h>
+#include "obse_common/SafeWrite.h"
 #include <Script.h>
 #include "PDB.h"
 #include "SharedMem.h"

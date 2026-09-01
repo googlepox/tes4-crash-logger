@@ -62,7 +62,7 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
       <Optimization>Disabled</Optimization>
-      <AdditionalIncludeDirectories>$(SolutionDir)..\OBSE;$(SolutionDir)..\OBSE\obse\;$(SolutionDir)..\OBSE\obse\obse;$(SolutionDir)..\OBSE\obse\obse_common;$(SolutionDir)..\OBSE\common;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)\..\..\;$(SolutionDir)\..\..\common;$(SolutionDir)\..\..\OBSE\obse;$(SolutionDir)\..\..\OBSE;$(SolutionDir)..\OBSE;$(SolutionDir)..\OBSE\obse\;$(SolutionDir)..\OBSE\obse\obse;$(SolutionDir)..\OBSE\obse\obse_common;$(SolutionDir)..\OBSE\common;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>WIN32;CRASHLOGGER_INCLUDE_OBSE;_DEBUG;_WINDOWS;_USRDLL;OBLIVION_VERSION=0x010201A0;OBLIVION;%(PreprocessorDefinitions);PDB_EXPORTS</PreprocessorDefinitions>
       <MinimalRebuild>false</MinimalRebuild>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
@@ -117,13 +117,6 @@
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ProjectReference Include="..\OBSE\common\common.vcxproj">
-      <Project>{9292d286-5ee5-4f14-b341-72875cb17d61}</Project>
-      <CopyLocalSatelliteAssemblies>true</CopyLocalSatelliteAssemblies>
-      <ReferenceOutputAssembly>true</ReferenceOutputAssembly>
-    </ProjectReference>
-  </ItemGroup>
-  <ItemGroup>
     <ClCompile Include="CallTrace.cpp" />
     <ClCompile Include="CrashLoggerAPI.cpp" />
     <ClCompile Include="Definitions.cpp" />
@@ -142,26 +135,6 @@
     <ClCompile Include="Modules.cpp" />
     <ClCompile Include="PDB.cpp" />
     <ClCompile Include="RegistryStack.cpp" />
-    <ClCompile Include="..\OBSE\obse\obse\GameActorValues.cpp" />
-    <ClCompile Include="..\OBSE\obse\obse\GameAPI.cpp" />
-    <ClCompile Include="..\OBSE\obse\obse\GameBSExtraData.cpp" />
-    <ClCompile Include="..\OBSE\obse\obse\GameData.cpp" />
-    <ClCompile Include="..\OBSE\obse\obse\GameExtraData.cpp" />
-    <ClCompile Include="..\OBSE\obse\obse\GameForms.cpp" />
-    <ClCompile Include="..\OBSE\obse\obse\GameObjects.cpp" />
-    <ClCompile Include="..\OBSE\obse\obse\GameOSDepend.cpp" />
-    <ClCompile Include="..\OBSE\obse\obse\GameTasks.cpp" />
-    <ClCompile Include="..\OBSE\obse\obse\GameTypes.cpp" />
-    <ClCompile Include="..\OBSE\obse\obse\NiAPI.cpp" />
-    <ClCompile Include="..\OBSE\obse\obse\NiNodes.cpp" />
-    <ClCompile Include="..\OBSE\obse\obse\NiObjects.cpp" />
-    <ClCompile Include="..\OBSE\obse\obse\NiRTTI.cpp" />
-    <ClCompile Include="..\OBSE\obse\obse\Script.cpp" />
-    <ClCompile Include="..\OBSE\obse\obse\Utilities.cpp" />
-    <ClCompile Include="..\OBSE\obse\obse_common\SafeWrite.cpp" />
-    <ClCompile Include="..\OBSE\obse\StdAfx.cpp">
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
-    </ClCompile>
     <ClCompile Include="SharedMem.cpp" />
     <ClCompile Include="CLUtilities.cpp" />
   </ItemGroup>
@@ -183,32 +156,17 @@
     <ClInclude Include="SharedMem.h" />
     <ClInclude Include="StackAPI.hpp" />
     <ClInclude Include="CLUtilities.hpp" />
-    <ClInclude Include="..\OBSE\obse\obse\GameActorValues.h" />
-    <ClInclude Include="..\OBSE\obse\obse\GameAPI.h" />
-    <ClInclude Include="..\OBSE\obse\obse\GameBSExtraData.h" />
-    <ClInclude Include="..\OBSE\obse\obse\GameData.h" />
-    <ClInclude Include="..\OBSE\obse\obse\GameExtraData.h" />
-    <ClInclude Include="..\OBSE\obse\obse\GameForms.h" />
-    <ClInclude Include="..\OBSE\obse\obse\GameObjects.h" />
-    <ClInclude Include="..\OBSE\obse\obse\GameOSDepend.h" />
-    <ClInclude Include="..\OBSE\obse\obse\GameTasks.h" />
-    <ClInclude Include="..\OBSE\obse\obse\GameTypes.h" />
-    <ClInclude Include="..\OBSE\obse\obse\NiAPI.h" />
-    <ClInclude Include="..\OBSE\obse\obse\NiNodes.h" />
-    <ClInclude Include="..\OBSE\obse\obse\NiObjects.h" />
-    <ClInclude Include="..\OBSE\obse\obse\NiRTTI.h" />
-    <ClInclude Include="..\OBSE\obse\obse\ParamInfos.h" />
-    <ClInclude Include="..\OBSE\obse\obse\PluginAPI.h" />
-    <ClInclude Include="..\OBSE\obse\obse\Script.h" />
-    <ClInclude Include="..\OBSE\obse\obse\Utilities.h" />
-    <ClInclude Include="..\OBSE\obse\obse_common\SafeWrite.h" />
-    <ClInclude Include="..\OBSE\obse\StdAfx.h" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="..\OBSE\obse\obse\GameRTTI_1_1.inl" />
-    <None Include="..\OBSE\obse\obse\GameRTTI_1_2.inl" />
-    <None Include="..\OBSE\obse\obse\GameRTTI_1_2_416.inl" />
     <None Include="exports.def" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\common\common.vcxproj">
+      <Project>{20c6411c-596f-4b85-be4e-8bc91f59d8a6}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\obse\obse\obse.vcxproj">
+      <Project>{01b76b21-f851-436e-acea-64fa03be8c59}</Project>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

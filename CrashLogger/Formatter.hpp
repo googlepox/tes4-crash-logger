@@ -126,7 +126,6 @@ inline auto LogClass(const BSAnimGroupSequence& obj)
 	return vec;
 }
 
-
 inline std::vector<std::string> LogClass(const AnimSequenceSingle& obj) { if (obj.Anim) return LogClass(*obj.Anim); return {}; }
 
 inline std::vector<std::string> LogClass(const AnimSequenceMultiple& obj)
