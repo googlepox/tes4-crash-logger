@@ -1,6 +1,1 @@
-[submodule "xOBSE"]
-	path = xOBSE
-	url = https://github.com/llde/xOBSE
-[submodule "OBSE"]
-	path = OBSE
-	url = https://github.com/llde/xOBSE
+
