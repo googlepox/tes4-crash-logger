@@ -208,10 +208,9 @@ namespace CrashLogger
 		}
 		if (!caught) {
 			caught = true;
-			//_MESSAGE("From Vectored Handler");
 			AttemptLog(ExceptionInfo);
 
-			RemoveVectoredExceptionHandler(handle);
+			//RemoveVectoredExceptionHandler(handle);
 		}
 		return EXCEPTION_CONTINUE_SEARCH;
 	}

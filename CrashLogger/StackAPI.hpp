@@ -68,7 +68,7 @@ namespace CrashLogger::Stack
 		std::string labelName, objectName, description;
 		if (GetStringForClassLabel(object, labelName, objectName, description, hProcess))
 		{
-			buffer += std::format("0x{:08X} ==> ", *(UInt32*)object) + labelName + ": " + objectName + ": " + description;
+			buffer += std::format("0x{:08X} ==> ", reinterpret_cast<std::uintptr_t>(object)) + labelName + ": " + objectName + ": " + description;
 			return true;
 		}
 
@@ -78,7 +78,7 @@ namespace CrashLogger::Stack
 		}
 		if (GetAsString(hProcess, object, labelName, description))
 		{
-			buffer += std::format("0x{:08X} ==> ", *(UInt32*)object) + labelName + ": " + '"' + description + '"';
+			buffer += std::format("0x{:08X} ==> ", reinterpret_cast<std::uintptr_t>(object)) + labelName + ": " + '"' + description + '"';
 			return true;
 		}
 

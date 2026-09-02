@@ -58,9 +58,11 @@ inline std::string& SanitizeStringBySize(std::string& str)
 
 inline std::string& SanitizeStringFromBadData(std::string& str)
 {
-	str.erase(std::remove_if(str.begin(), str.end(), [](char c) { return !(c >= 0 && c <= 0x128); }), str.end());
+	str.erase(std::remove_if(str.begin(), str.end(),
+		[](unsigned char c) { return c < 0x20 || c > 0x7E; }), str.end());
 
-	std::replace_if(str.begin(), str.end(), [](char c) { return c == '\n' || c == '\r' || c == '\0' || c == '\v'; }, ' ');
+	std::replace_if(str.begin(), str.end(),
+		[](char c) { return c == '\n' || c == '\r' || c == '\0' || c == '\v'; }, ' ');
 
 	return str;
 }
@@ -99,9 +101,9 @@ inline std::string& SanitizeStringFromUserInfo(std::string& str)
 
 inline std::string SanitizeString(std::string str)
 {
-	SanitizeStringBySize(str);
+	//SanitizeStringBySize(str);
 	SanitizeStringFromBadData(str);
-	SanitizeStringFromUserInfo(str);
+	//SanitizeStringFromUserInfo(str);
 	return str;
 }
 

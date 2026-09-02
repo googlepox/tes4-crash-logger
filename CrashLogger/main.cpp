@@ -47,7 +47,7 @@ extern "C" {
       // fill out the info structure
       info->infoVersion = PluginInfo::kInfoVersion;
       info->name        = "CrashLoggerImproved";
-      info->version     = 0x01070100; // major, minor, patch, build
+      info->version     = 0x01070200; // major, minor, patch, build
 
       {  // log our version number -- be helpful!
          auto v = info->version;
@@ -82,6 +82,7 @@ extern "C" {
       {
           _MESSAGE("Failed to get module handle: %d", GetLastError());
       }
+
       return true;
    }
 

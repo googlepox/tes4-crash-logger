@@ -67,10 +67,10 @@ namespace CrashLogger::PDB
         }
     }
 
-    struct RTTITypePrefix
-    {
-        void* typeInfo;
-        UInt32 pad;
+    struct TypeDescriptor {
+        void* pVFTable;   // 0x00
+        void* spare;      // 0x04
+        char name[1];     // 0x08
     };
 
     // Unified function: local fast path + remote safe path
@@ -177,14 +177,14 @@ namespace CrashLogger::PDB
         if (!locator.type)
             return {};
 
-        RTTITypePrefix typePrefix{};
+        TypeDescriptor typePrefix{};
         if (!VirtualQueryEx(effective, locator.type, &mbi, sizeof(mbi)))
             return {};
         if (mbi.State != MEM_COMMIT)
             return {};
         if (mbi.Protect & (PAGE_NOACCESS | PAGE_GUARD))
             return {};
-        if (mbi.RegionSize < sizeof(RTTITypePrefix))
+        if (mbi.RegionSize < sizeof(TypeDescriptor))
             return {};
 
         bytesRead = 0;
@@ -194,7 +194,7 @@ namespace CrashLogger::PDB
         {
             return {};
         }
-        constexpr SIZE_T nameOffset = sizeof(RTTITypePrefix);
+        constexpr SIZE_T nameOffset = offsetof(TypeDescriptor, name);
         std::uintptr_t nameRemoteAddr =
             reinterpret_cast<std::uintptr_t>(locator.type) + nameOffset;
 
