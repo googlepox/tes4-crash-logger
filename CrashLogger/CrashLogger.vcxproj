@@ -90,7 +90,7 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
-      <AdditionalIncludeDirectories>$(SolutionDir)..\OBSE;$(SolutionDir)..\OBSE\obse\;$(SolutionDir)..\OBSE\obse\obse;$(SolutionDir)..\OBSE\obse\obse_common;$(SolutionDir)..\OBSE\common;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)\..\..\;$(SolutionDir)\..\..\common;$(SolutionDir)\..\..\OBSE\obse;$(SolutionDir)\..\..\OBSE;$(SolutionDir)..\OBSE;$(SolutionDir)..\OBSE\obse\;$(SolutionDir)..\OBSE\obse\obse;$(SolutionDir)..\OBSE\obse\obse_common;$(SolutionDir)..\OBSE\common;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>WIN32;CRASHLOGGER_INCLUDE_OBSE;NDEBUG;_WINDOWS;_USRDLL;OBLIVION_VERSION=0x010201A0;OBLIVION;%(PreprocessorDefinitions);PDB_EXPORTS</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
