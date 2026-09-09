@@ -76,6 +76,8 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
+      <AdditionalIncludeDirectories>$(SolutionDir)\..\..\;$(SolutionDir)\..\..\common;$(SolutionDir)\..\..\OBSE\obse;$(SolutionDir)\..\..\OBSE;$(SolutionDir)..\OBSE;$(SolutionDir)..\OBSE\obse\;$(SolutionDir)..\OBSE\obse\obse;$(SolutionDir)..\OBSE\obse\obse_common;$(SolutionDir)..\OBSE\common;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
