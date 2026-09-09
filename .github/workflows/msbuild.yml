@@ -1,0 +1,38 @@
+name: Build OBSE Plugin
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout xOBSE SDK
+        uses: actions/checkout@v4
+        with:
+          repository: llde/xOBSE
+          ref: master
+
+      - name: Checkout plugin source
+        uses: actions/checkout@v4
+        with:
+          path: tes4-crash-logger
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Build
+        run: msbuild tes4-crash-logger/CrashLogger/CrashLogger.sln /p:Configuration=Release /p:Platform=Win32 /m
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CrashLoggerImproved
+          path: |
+            tes4-crash-logger/CrashLogger/Release/CobbCrashLogger.dll
+            tes4-crash-logger/CrashLogger/Release/CobbCrashLogger.pdb
