@@ -28,6 +28,45 @@
     <ClCompile Include="CrashLoggerAPI.cpp" />
     <ClCompile Include="MemoryProbe.cpp" />
     <ClCompile Include="CLUtilities.cpp" />
+    <ClCompile Include="..\..\obse\obse_common\SafeWrite.cpp">
+      <Filter>obse</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\obse\obse\GameActorValues.cpp">
+      <Filter>obse</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\obse\obse\GameAPI.cpp">
+      <Filter>obse</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\obse\obse\GameBSExtraData.cpp">
+      <Filter>obse</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\obse\obse\GameData.cpp">
+      <Filter>obse</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\obse\obse\GameExtraData.cpp">
+      <Filter>obse</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\obse\obse\GameForms.cpp">
+      <Filter>obse</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\obse\obse\GameObjects.cpp">
+      <Filter>obse</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\obse\obse\Utilities.cpp">
+      <Filter>obse</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\obse\obse\Script.cpp">
+      <Filter>obse</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\obse\obse\GameTypes.cpp">
+      <Filter>obse</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\obse\obse\NiNodes.cpp">
+      <Filter>obse</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\obse\obse\GameTasks.cpp">
+      <Filter>obse</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ExceptionHandler.hpp" />
@@ -70,6 +109,45 @@
     </ClInclude>
     <ClInclude Include="SharedMem.h">
       <Filter>include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\obse\obse_common\SafeWrite.h">
+      <Filter>obse</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\obse\obse\GameActorValues.h">
+      <Filter>obse</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\obse\obse\GameAPI.h">
+      <Filter>obse</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\obse\obse\GameBSExtraData.h">
+      <Filter>obse</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\obse\obse\GameData.h">
+      <Filter>obse</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\obse\obse\GameExtraData.h">
+      <Filter>obse</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\obse\obse\GameForms.h">
+      <Filter>obse</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\obse\obse\GameObjects.h">
+      <Filter>obse</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\obse\obse\Utilities.h">
+      <Filter>obse</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\obse\obse\Script.h">
+      <Filter>obse</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\obse\obse\GameTypes.h">
+      <Filter>obse</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\obse\obse\NiNodes.h">
+      <Filter>obse</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\obse\obse\GameTasks.h">
+      <Filter>obse</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
