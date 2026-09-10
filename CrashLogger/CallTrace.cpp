@@ -324,12 +324,14 @@ namespace CrashLogger::Calltrace
 
 			SymSetOptions(SYMOPT_LOAD_LINES | SYMOPT_DEFERRED_LOADS | SYMOPT_UNDNAME | SYMOPT_ALLOW_ABSOLUTE_SYMBOLS);
 
-			char workingDirectory[MAX_PATH];
-			char symbolPath[MAX_PATH];
-			char altSymbolPath[MAX_PATH];
+			char workingDirectory[MAX_PATH] = {};
+			char symbolPath[MAX_PATH] = {};
+			char altSymbolPath[MAX_PATH] = {};
 			GetCurrentDirectory(MAX_PATH, workingDirectory);
-			GetEnvironmentVariable("_NT_SYMBOL_PATH", symbolPath, MAX_PATH);
-			GetEnvironmentVariable("_NT_ALTERNATE_SYMBOL_PATH", altSymbolPath, MAX_PATH);
+			if (!GetEnvironmentVariableA("_NT_SYMBOL_PATH", symbolPath, MAX_PATH))
+				symbolPath[0] = '\0';
+			if (!GetEnvironmentVariableA("_NT_ALTERNATE_SYMBOL_PATH", altSymbolPath, MAX_PATH))
+				altSymbolPath[0] = '\0';
 			std::string lookPath = std::format("{};{}\\Data\\OBSE\\plugins;{};{}", workingDirectory, workingDirectory, symbolPath, altSymbolPath);
 
 			//	SymSetExtendedOption((IMAGEHLP_EXTENDED_OPTIONS)SYMOPT_EX_WINE_NATIVE_MODULES, TRUE);

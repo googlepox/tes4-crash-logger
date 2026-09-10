@@ -198,12 +198,10 @@ namespace CrashLogger
 			return EXCEPTION_CONTINUE_EXECUTION;
 		}
 		if(ExceptionInfo->ExceptionRecord->ExceptionCode == 0x40010006){
-			_MESSAGE("%s",   reinterpret_cast<char*>(ExceptionInfo->ExceptionRecord->ExceptionInformation[1]));
 			return EXCEPTION_CONTINUE_EXECUTION;
 		}
 		if (ExceptionInfo->ExceptionRecord->ExceptionCode == 0xE06D7363)
 		{
-			_MESSAGE("%s", reinterpret_cast<char*>(ExceptionInfo->ExceptionRecord->ExceptionInformation[1]));
 			return EXCEPTION_CONTINUE_SEARCH;
 		}
 		if (!caught) {

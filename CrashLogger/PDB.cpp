@@ -303,7 +303,7 @@ namespace CrashLogger::PDB
         module.SizeOfStruct = sizeof(IMAGEHLP_MODULE);
         if (!SymGetModuleInfo(process, eip, &module)) return "";
 
-        return module.ModuleName;
+        return std::string(module.ModuleName, strnlen(module.ModuleName, sizeof(module.ModuleName)));
     }
 
     extern UInt32 GetModuleBase(UInt32 eip, HANDLE process)
@@ -333,13 +333,14 @@ namespace CrashLogger::PDB
 
     extern std::string GetLine(UInt32 eip, HANDLE process)
     {
-        char lineBuffer[sizeof(IMAGEHLP_LINE) + 255];
+        char lineBuffer[sizeof(IMAGEHLP_LINE) + 255]{};
         const auto line = (IMAGEHLP_LINE*)lineBuffer;
         line->SizeOfStruct = sizeof(IMAGEHLP_LINE);
 
         DWORD offset = 0;
 
         if (!SymGetLineFromAddr(process, eip, &offset, line)) return "";
+        if (!line->FileName || line->FileName[0] == '\0') return "";
 
         return std::format("{}:{:d}", line->FileName, line->LineNumber);
     }
