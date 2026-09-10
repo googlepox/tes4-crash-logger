@@ -31,10 +31,18 @@
 *.out
 *.app
 /.vs
+
 /CrashLogger/.vs
 /Debug
 /CrashLogger/Debug
 /CrashLogger/Release
+
+*.json
+*.command
+*.res
+*.recipe
+*.ilk
+*.idb
 
 /OBSE
 /xOBSE
