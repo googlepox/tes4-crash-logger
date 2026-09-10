@@ -36,3 +36,5 @@ jobs:
           path: |
             tes4-crash-logger/CrashLogger/Release/CobbCrashLogger.dll
             tes4-crash-logger/CrashLogger/Release/CobbCrashLogger.pdb
+            tes4-crash-logger/CrashLoggerHelper/Release/CrashLoggerHelper.dll
+            tes4-crash-logger/CrashLoggerHelper/Release/CrashLoggerHelper.pdb
