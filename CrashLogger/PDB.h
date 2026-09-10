@@ -1,7 +1,7 @@
 #pragma once
 #include <Windows.h>
 #include <string>
-#include "ITypes.h"
+#include "../../common/ITypes.h"
 
 namespace CrashLogger::PDB
 {
