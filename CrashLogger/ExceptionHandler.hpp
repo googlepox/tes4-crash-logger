@@ -1,9 +1,12 @@
 #include "CrashLogger.hpp"
 #include "Logging.hpp"
 #include <signal.h>
+#include <string.h>
 #include "SharedMem.h"
 #include "Dereference.hpp"
 #include <obse_common/SafeWrite.h>
+#include "lib/simpleINI.hpp"
+#include "lib/distribution.hpp"
 
 #define SYMOPT_EX_WINE_NATIVE_MODULES 1000
 
@@ -11,6 +14,15 @@ constexpr UInt32 ce_printStackCount = 256;
 
 namespace CrashLogger
 {
+	bool MEMORY_PROFILER_ENABLED = false;
+	bool PRINT_HEAPS = false;
+	bool PRINT_POOLS = false;
+
+	std::unordered_map<std::string, bool*> configMap =
+	{
+		{ "MEMORY_PROFILER_ENABLED",   &MEMORY_PROFILER_ENABLED },
+	};
+
 	void trans_func( unsigned int u, EXCEPTION_POINTERS* pExp )
 	{
 		throw SE_Exception();
@@ -241,19 +253,72 @@ namespace CrashLogger
 		SafeWrite32(0x00A281B4, (UInt32)&FakeSetUnhandledExceptionFilter);
 	}
 
+	void LoadINI()
+	{
+		std::ifstream file("Data\\OBSE\\Plugins\\CrashLogger.ini");
+		if (!file.is_open())
+		{
+			_MESSAGE("CrashLogger.ini not found");
+			return;
+		}
+
+		std::string line;
+		enum Section { NONE, CONFIG } section = NONE;
+
+		while (std::getline(file, line))
+		{
+			if (line.empty() || line[0] == ';')
+				continue;
+
+			if (line[0] == '[')
+			{
+				if (line == "[CrashLogger]") section = CONFIG;
+				else section = NONE;
+				continue;
+			}
+
+			std::stringstream ss(line);
+
+			if (section == CONFIG)
+			{
+				std::string key, value;
+
+				std::getline(ss, key, '=');
+				std::getline(ss, value);
+
+				bool b = std::stoi(value);
+
+				auto it = configMap.find(key);
+				if (it != configMap.end())
+				{
+					*it->second = b;
+				}
+			}
+		}
+	}
+
 	extern void Init()
 	{
+		ULONG guarantee = 65536;
+		SetThreadStackGuarantee(&guarantee);
+
 		InitSharedMemory(true);
 
 		Playtime::Init();
 
 		InstallExceptionFilterHook();
 
-		Memory::InstallAllocHook();
-		Memory::InstallFreeHook();
+		LoadINI();
 
-		Memory::StartMemoryProfiler();
-		Memory::LaunchHelper();
+		if (MEMORY_PROFILER_ENABLED)
+		{
+			_MESSAGE("Memory Profiler enabled, check AllocDump.txt for details.");
+			Memory::InstallAllocHook();
+			Memory::InstallFreeHook();
+
+			Memory::StartMemoryProfiler();
+			Memory::LaunchHelper();
+		}
 
 		AddVectoredException();
 	}
