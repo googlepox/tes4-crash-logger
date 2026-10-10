@@ -3,14 +3,15 @@
 #include <atomic>
 #include <stdio.h>
 
-constexpr uint32_t SHM_CAPACITY = 1 << 20; // number of events
-constexpr uint32_t SHM_MAGIC = 0x4D454D43; // 'CMEM'
+constexpr uint32_t SHM_CAPACITY = 1 << 20;
+constexpr uint32_t SHM_MAGIC = 0x4D454D43;
 
 extern HMODULE g_hThisDLL;
 
 constexpr uint32_t AE_TYPE_FREE = 0x80000000u;
 constexpr uint32_t AE_SIZE_MASK = 0x7FFFFFFFu;
 
+constexpr float HEAP_ALWAYS = 0.00f;
 constexpr float HEAP_WARN = 0.90f;
 constexpr float HEAP_CRITICAL = 0.94f;
 constexpr float HEAP_PANIC = 0.97f;
@@ -47,13 +48,9 @@ struct SharedMemBuffer
 extern SharedMemBuffer* g_shm;
 extern bool g_shmReady;
 
-// mode:
-//  - true  = create (writer / game)
-//  - false = open   (reader / helper)
 bool InitSharedMemory(bool create);
 void ShutdownSharedMemory();
 
-// non-blocking, safe for hooks
 inline void TryWriteShared(const AllocEvent& ev)
 {
     if (!g_shmReady)
