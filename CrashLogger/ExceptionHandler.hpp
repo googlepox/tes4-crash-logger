@@ -21,6 +21,8 @@ namespace CrashLogger
 	std::unordered_map<std::string, bool*> configMap =
 	{
 		{ "MEMORY_PROFILER_ENABLED",   &MEMORY_PROFILER_ENABLED },
+		{ "PRINT_HEAPS",   &PRINT_HEAPS },
+		{ "PRINT_POOLS",   &PRINT_POOLS },
 	};
 
 	void trans_func( unsigned int u, EXCEPTION_POINTERS* pExp )
@@ -253,6 +255,14 @@ namespace CrashLogger
 		SafeWrite32(0x00A281B4, (UInt32)&FakeSetUnhandledExceptionFilter);
 	}
 
+	static std::string Trim(const std::string& s)
+	{
+		size_t a = s.find_first_not_of(" \t\r\n");
+		if (a == std::string::npos) return "";
+		size_t b = s.find_last_not_of(" \t\r\n");
+		return s.substr(a, b - a + 1);
+	}
+
 	void LoadINI()
 	{
 		std::ifstream file("Data\\OBSE\\Plugins\\CrashLogger.ini");
@@ -263,37 +273,44 @@ namespace CrashLogger
 		}
 
 		std::string line;
-		enum Section { NONE, CONFIG } section = NONE;
+		bool inSection = false;
+		bool first = true;
 
 		while (std::getline(file, line))
 		{
-			if (line.empty() || line[0] == ';')
+			if (first)
+			{
+				first = false;
+				if (line.compare(0, 3, "\xEF\xBB\xBF") == 0)
+					line.erase(0, 3);
+			}
+
+			line = Trim(line);
+			if (line.empty() || line[0] == ';' || line[0] == '#')
 				continue;
 
 			if (line[0] == '[')
 			{
-				if (line == "[CrashLogger]") section = CONFIG;
-				else section = NONE;
+				inSection = (line == "[CrashLogger]");
 				continue;
 			}
 
-			std::stringstream ss(line);
+			if (!inSection)
+				continue;
 
-			if (section == CONFIG)
-			{
-				std::string key, value;
+			size_t eq = line.find('=');
+			if (eq == std::string::npos)
+				continue;
 
-				std::getline(ss, key, '=');
-				std::getline(ss, value);
+			std::string key = Trim(line.substr(0, eq));
+			std::string value = Trim(line.substr(eq + 1));
 
-				bool b = std::stoi(value);
+			auto it = configMap.find(key);
+			if (it == configMap.end())
+				continue;
 
-				auto it = configMap.find(key);
-				if (it != configMap.end())
-				{
-					*it->second = b;
-				}
-			}
+			bool b = atoi(value.c_str()) != 0;
+			*it->second = b;
 		}
 	}
 
