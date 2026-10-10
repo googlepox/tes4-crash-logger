@@ -57,6 +57,24 @@ inline auto LogClass(TESForm& obj)
 		}
 		vec.push_back(std::format("ID: {:08X} ({}) {}", refID, refName, loaded));
 	}
+	else if(modIndex == 0xFE && ESL::Available)
+	{
+		std::string modName = ESL::GetModNameForFormID(refID);
+
+		ModEntry::Data* sourceMod = (ModEntry::Data*)obj.modRefList.Info();
+		ModRefListVisitor newVisitor = ModRefListVisitor(&obj.modRefList);
+		ModEntry::Data* lastMod = (ModEntry::Data*)newVisitor.GetLastNode()->Info();
+
+		if (sourceMod != lastMod)
+		{
+			modName = std::format("\"{}\" (Last modified by: \"{}\")", modName, lastMod->name);
+		}
+		else
+		{
+			modName = std::format("\"{}\"", modName);
+		}
+		vec.push_back(std::format("ID: {:08X} ({}) : (Plugin: {}) {}", refID, refName, modName, loaded));
+	}
 	else if (modIndex != 0xFF) {
 		std::string modName = (*g_dataHandler)->GetNthModName(modIndex);
 
