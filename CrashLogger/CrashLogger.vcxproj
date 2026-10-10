@@ -170,6 +170,8 @@
     <ClInclude Include="Dereference.hpp" />
     <ClInclude Include="Labels.hpp" />
     <ClInclude Include="LabelsOBSE.h" />
+    <ClInclude Include="lib\distribution.hpp" />
+    <ClInclude Include="lib\simpleINI.hpp" />
     <ClInclude Include="LogClassByLine.h" />
     <ClInclude Include="MemoryProbe.hpp" />
     <ClInclude Include="PDB.h" />

@@ -10,6 +10,9 @@
     <Filter Include="internal">
       <UniqueIdentifier>{125a1277-c88c-4078-a03f-6edfebac17d0}</UniqueIdentifier>
     </Filter>
+    <Filter Include="lib">
+      <UniqueIdentifier>{3f2f05b4-c795-4c42-8de1-aa8cc3b44fb5}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dllmain.c" />
@@ -148,6 +151,12 @@
     </ClInclude>
     <ClInclude Include="..\..\obse\obse\GameTasks.h">
       <Filter>obse</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\simpleINI.hpp">
+      <Filter>lib</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\distribution.hpp">
+      <Filter>lib</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
