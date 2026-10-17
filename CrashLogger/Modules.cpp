@@ -106,7 +106,8 @@ namespace CrashLogger::Modules
 
 		const UInt32 eip = info->ContextRecord->Eip;
 
-		UserContext infoUser = { eip,  0, (char*)calloc(sizeof(char), 200) };
+		char moduleName[200] = {};
+		UserContext infoUser = { eip, 0, moduleName };
 
 		EnumerateLoadedModules(process, EumerateModulesCallback, &infoUser);
 
